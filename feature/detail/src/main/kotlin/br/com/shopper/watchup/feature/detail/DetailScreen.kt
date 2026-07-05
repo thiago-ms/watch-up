@@ -51,6 +51,7 @@ import br.com.shopper.watchup.core.data.domain.disponibilidadeVisivel
 import br.com.shopper.watchup.core.data.domain.episodiosFaltantes
 import br.com.shopper.watchup.core.data.domain.estaEmDia
 import br.com.shopper.watchup.core.data.domain.fracaoProgresso
+import br.com.shopper.watchup.core.data.domain.permiteVisto
 import br.com.shopper.watchup.core.data.domain.temCardProgresso
 import br.com.shopper.watchup.core.data.model.EpisodiosTemporada
 import br.com.shopper.watchup.core.data.model.Midia
@@ -151,7 +152,7 @@ fun DetailScreen(
 
             when {
                 m.tipo.episodica && m.statusLancEpisodico == StatusLancEpisodico.VAI_LANCAR ->
-                    AvisoCard("Ainda vai lançar — sem disponibilidade ou progresso por enquanto.")
+                    AvisoCard(avisoVaiLancar(m))
 
                 temCardProgresso(m) ->
                     CardProgresso(m, onAtualizar = { onAtualizarProgresso(m.id) })
@@ -214,7 +215,7 @@ private fun SeuStatusSelector(m: Midia, onSelecionar: (StatusUsuario) -> Unit) {
     } else {
         listOf(StatusUsuario.QUERO_ASSISTIR, StatusUsuario.VISTO)
     }
-    val vistoBloqueado = m.tipo.episodica && m.statusLancEpisodico != StatusLancEpisodico.COMPLETA
+    val vistoBloqueado = !permiteVisto(m.tipo, m.statusLancEpisodico)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         opcoes.forEach { s ->
             val bloqueado = s == StatusUsuario.VISTO && vistoBloqueado
@@ -224,7 +225,7 @@ private fun SeuStatusSelector(m: Midia, onSelecionar: (StatusUsuario) -> Unit) {
                 onClick = { if (!bloqueado && m.statusUsuario != s) onSelecionar(s) },
                 label = { Text(s.rotulo) },
                 trailingIcon = if (bloqueado) {
-                    { Icon(Icons.Filled.Lock, contentDescription = "Requer status Completa", modifier = Modifier.height(16.dp)) }
+                    { Icon(Icons.Filled.Lock, contentDescription = "Requer status Completa ou Cancelada", modifier = Modifier.height(16.dp)) }
                 } else {
                     null
                 },
@@ -232,9 +233,18 @@ private fun SeuStatusSelector(m: Midia, onSelecionar: (StatusUsuario) -> Unit) {
         }
     }
     if (vistoBloqueado) {
-        Text("\"Visto\" requer status Completa", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("\"Visto\" requer status Completa ou Cancelada", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
+
+/** Texto do aviso para episódica "vai lançar" (série nova × temporada nova). */
+private fun avisoVaiLancar(m: Midia): String =
+    if (m.temporadasDisponiveis > 0) {
+        "Nova temporada ${m.temporadasDisponiveis + 1} a caminho — " +
+            "${m.temporadasDisponiveis} temporada(s) já disponível(is). Sem progresso por enquanto."
+    } else {
+        "Ainda vai lançar — sem disponibilidade ou progresso por enquanto."
+    }
 
 @Composable
 private fun AvisoCard(texto: String) {
@@ -284,7 +294,9 @@ private fun Ficha(m: Midia, onEditar: (Int) -> Unit) {
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             )
-            m.statusLancEpisodico?.let { FichaLinha("Lançamento", it.rotulo) { onEditar(ETAPA_DATAS_STATUS) } }
+            // Lançamento: episódica usa o status escolhido; não-episódica (filme) usa o derivado.
+            val lancamento = m.statusLancEpisodico?.rotulo ?: deriveStatusMidia(m).rotulo
+            FichaLinha("Lançamento", lancamento) { onEditar(ETAPA_DATAS_STATUS) }
             FichaLinha("Onde assistir", ondeAssistir(m)) { onEditar(ETAPA_ONDE_ASSISTIR) }
             FichaLinha("Contexto", m.contexto.rotulo) { onEditar(ETAPA_DETALHES) }
             FichaLinha("Status da data", m.statusData.rotulo) { onEditar(ETAPA_DATAS_STATUS) }

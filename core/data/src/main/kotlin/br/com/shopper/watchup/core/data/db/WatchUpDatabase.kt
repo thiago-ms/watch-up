@@ -8,7 +8,7 @@ import br.com.shopper.watchup.core.data.model.Midia
 
 @Database(
     entities = [Midia::class, EpisodiosTemporada::class],
-    version = 1,
+    version = 2,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)

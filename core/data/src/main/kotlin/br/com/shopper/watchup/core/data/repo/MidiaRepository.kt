@@ -39,7 +39,10 @@ interface MidiaRepository {
                         context.applicationContext,
                         WatchUpDatabase::class.java,
                         "watchup.db",
-                    ).build()
+                    )
+                        // MVP local: sem migração incremental — recria o banco no upgrade de schema.
+                        .fallbackToDestructiveMigration()
+                        .build()
                     RoomMidiaRepository(db.midiaDao()).also { instance = it }
                 }
             }

@@ -19,16 +19,26 @@ import java.time.temporal.ChronoUnit
 fun deriveStatusMidia(m: Midia, hoje: LocalDate = LocalDate.now()): StatusMidia = when {
     m.tipo.episodica -> when (m.statusLancEpisodico) {
         StatusLancEpisodico.COMPLETA -> StatusMidia.FINALIZADA
+        StatusLancEpisodico.CANCELADA -> StatusMidia.CANCELADA
         StatusLancEpisodico.LANCANDO -> StatusMidia.LANCANDO
         StatusLancEpisodico.VAI_LANCAR -> StatusMidia.EM_BREVE
         null -> StatusMidia.EM_CARTAZ
     }
+
+    // Não-episódica cancelada (filme etc.).
+    m.cancelada -> StatusMidia.CANCELADA
 
     m.statusData == StatusData.DEFINIDA && m.dataPrincipal != null && m.dataPrincipal.isAfter(hoje) ->
         StatusMidia.EM_BREVE
 
     else -> StatusMidia.EM_CARTAZ
 }
+
+/** Séries "terminadas" onde faz sentido marcar "Visto" (§5.5) — Completa ou Cancelada. */
+fun permiteVisto(tipo: TipoMidia, statusLancEp: StatusLancEpisodico?): Boolean =
+    !tipo.episodica ||
+        statusLancEp == StatusLancEpisodico.COMPLETA ||
+        statusLancEp == StatusLancEpisodico.CANCELADA
 
 /**
  * §5.3 — rótulo de exibição do status do usuário. "Em dia" **não** é uma opção

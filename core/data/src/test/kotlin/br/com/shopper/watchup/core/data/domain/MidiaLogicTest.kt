@@ -8,6 +8,7 @@ import br.com.shopper.watchup.core.data.model.StatusLancEpisodico
 import br.com.shopper.watchup.core.data.model.StatusMidia
 import br.com.shopper.watchup.core.data.model.StatusUsuario
 import br.com.shopper.watchup.core.data.model.TipoMidia
+import br.com.shopper.watchup.core.data.domain.permiteVisto
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -81,6 +82,25 @@ class MidiaLogicTest {
     @Test
     fun `serie que vai lancar vira EM_BREVE`() {
         assertEquals(StatusMidia.EM_BREVE, deriveStatusMidia(serie(StatusLancEpisodico.VAI_LANCAR), hoje))
+    }
+
+    @Test
+    fun `serie cancelada vira CANCELADA`() {
+        assertEquals(StatusMidia.CANCELADA, deriveStatusMidia(serie(StatusLancEpisodico.CANCELADA), hoje))
+    }
+
+    @Test
+    fun `filme cancelado vira CANCELADA`() {
+        val m = filme(StatusData.DEFINIDA, hoje.plusDays(10)).copy(cancelada = true)
+        assertEquals(StatusMidia.CANCELADA, deriveStatusMidia(m, hoje))
+    }
+
+    @Test
+    fun `permiteVisto libera para completa cancelada e nao episodica`() {
+        assertTrue(permiteVisto(TipoMidia.SERIE, StatusLancEpisodico.COMPLETA))
+        assertTrue(permiteVisto(TipoMidia.SERIE, StatusLancEpisodico.CANCELADA))
+        assertFalse(permiteVisto(TipoMidia.SERIE, StatusLancEpisodico.LANCANDO))
+        assertTrue(permiteVisto(TipoMidia.FILME, null))
     }
 
     // §5.3 -------------------------------------------------------------------

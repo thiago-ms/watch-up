@@ -1,6 +1,7 @@
 package br.com.shopper.watchup.feature.registration
 
 import br.com.shopper.watchup.core.data.domain.disponibilidadeVisivel
+import br.com.shopper.watchup.core.data.domain.permiteVisto
 import br.com.shopper.watchup.core.data.domain.progressoVisivel
 import br.com.shopper.watchup.core.data.model.Contexto
 import br.com.shopper.watchup.core.data.model.Midia
@@ -25,6 +26,9 @@ data class FormDraft(
     val streamingPrincipal: String? = null,
     val cinemaRede: String? = null,
     val statusLancEpisodico: StatusLancEpisodico? = null,
+    val vaiLancarTipo: VaiLancarTipo? = null, // só quando statusLancEpisodico = VAI_LANCAR
+    val novaTemporada: String = "", // nº da nova temporada (quando TEMPORADA_NOVA)
+    val cancelada: Boolean = false, // cancelamento de não-episódica (filme etc.)
     val statusData: StatusData? = null,
     val dataTexto: String = "", // dígitos ddMMyyyy (máscara aplicada na UI)
     val diaLancamento: String = "",
@@ -36,6 +40,12 @@ data class FormDraft(
     val statusUsuario: StatusUsuario? = null,
 ) {
     val episodica: Boolean get() = tipo?.episodica == true
+}
+
+/** Sub-tipo de "Vai lançar" (episódica): série inteira nova ou uma nova temporada. */
+enum class VaiLancarTipo(val rotulo: String) {
+    SERIE_NOVA("Série nova"),
+    TEMPORADA_NOVA("Temporada nova"),
 }
 
 /** Ordem de exibição dos tipos na etapa 1 do cadastro. */
@@ -70,8 +80,10 @@ enum class PassoCadastro(val titulo: String) {
  * episódica "vai lançar". Nos demais casos episódicos (Completa/Lançando) ele é
  * automaticamente NAO_APLICA e o bloco fica oculto.
  */
-fun statusDataVisivel(d: FormDraft): Boolean =
-    !d.episodica || d.statusLancEpisodico == StatusLancEpisodico.VAI_LANCAR
+fun statusDataVisivel(d: FormDraft): Boolean = when {
+    d.episodica -> d.statusLancEpisodico == StatusLancEpisodico.VAI_LANCAR
+    else -> !d.cancelada // filme cancelado não tem data
+}
 
 // --- Data (dígitos ddMMyyyy) ------------------------------------------------
 fun parseData(digitos: String): LocalDate? {
@@ -128,20 +140,30 @@ fun validarPasso(passo: PassoCadastro, d: FormDraft): String? = when (passo) {
 }
 
 private fun validarDatasStatus(d: FormDraft): String? {
+    val tipo = d.tipo ?: return "Escolha o tipo da mídia."
     if (d.episodica && d.statusLancEpisodico == null) return "Selecione o status de lançamento."
 
-    // Status da data só é exigido quando visível (não-episódica ou "vai lançar").
+    // "Vai lançar": exige escolher série nova × temporada nova.
+    if (d.episodica && d.statusLancEpisodico == StatusLancEpisodico.VAI_LANCAR) {
+        if (d.vaiLancarTipo == null) return "É série nova ou temporada nova?"
+        if (d.vaiLancarTipo == VaiLancarTipo.TEMPORADA_NOVA) {
+            val n = d.novaTemporada.toIntOrNull()
+            if (n == null || n < 2) return "Informe o número da nova temporada (2 ou maior)."
+        }
+    }
+
+    // Status da data só é exigido quando visível (não-episódica não cancelada, ou "vai lançar").
     if (statusDataVisivel(d)) {
         if (d.statusData == null) return "Selecione o status da data."
         if (d.statusData == StatusData.DEFINIDA && parseData(d.dataTexto) == null) return "Informe a data principal."
     }
 
-    val dispVisivel = disponibilidadeVisivel(d.tipo ?: return "Escolha o tipo da mídia.", d.statusLancEpisodico)
+    val dispVisivel = disponibilidadeVisivel(tipo, d.statusLancEpisodico)
     if (dispVisivel && d.temporadasDisponiveis.toIntOrNull() == null) return "Obrigatório."
 
     if (d.statusUsuario == null) return "Escolha seu status."
-    if (d.episodica && d.statusLancEpisodico != StatusLancEpisodico.COMPLETA && d.statusUsuario == StatusUsuario.VISTO) {
-        return "Só marque 'Visto' quando a série estiver Completa."
+    if (d.statusUsuario == StatusUsuario.VISTO && !permiteVisto(tipo, d.statusLancEpisodico)) {
+        return "Só marque 'Visto' quando a série estiver Completa ou Cancelada."
     }
 
     val progVisivel = progressoVisivel(d.tipo, d.statusLancEpisodico, d.statusUsuario)
@@ -166,11 +188,19 @@ fun FormDraft.toMidia(id: Long = 0): Midia {
     val dispVisivel = disponibilidadeVisivel(tipo, statusLancEpisodico)
     val progVisivel = progressoVisivel(tipo, statusLancEpisodico, statusUsuario)
     val lancando = statusLancEpisodico == StatusLancEpisodico.LANCANDO
+    val vaiLancar = statusLancEpisodico == StatusLancEpisodico.VAI_LANCAR
 
-    // Episódica não "vai lançar" → statusData automático NAO_APLICA (§6, campo oculto).
+    // Campo oculto de status da data → automático NAO_APLICA (§6).
     val statusDataFinal =
-        if (tipo.episodica && statusLancEpisodico != StatusLancEpisodico.VAI_LANCAR) StatusData.NAO_APLICA
-        else requireNotNull(statusData)
+        if (statusDataVisivel(this)) requireNotNull(statusData) else StatusData.NAO_APLICA
+
+    // "Temporada nova" → temporadas disponíveis são as anteriores à nova (N - 1).
+    val temporadasCalc = when {
+        vaiLancar && vaiLancarTipo == VaiLancarTipo.TEMPORADA_NOVA ->
+            ((novaTemporada.toIntOrNull() ?: 1) - 1).coerceAtLeast(0)
+        dispVisivel -> temporadasDisponiveis.toIntOrNull() ?: 0
+        else -> 0
+    }
 
     return Midia(
         id = id,
@@ -184,11 +214,12 @@ fun FormDraft.toMidia(id: Long = 0): Midia {
         streamingPrincipal = if (streaming) streamingPrincipal else null,
         cinemaRede = if (cinema) cinemaRede else null,
         statusLancEpisodico = if (tipo.episodica) statusLancEpisodico else null,
+        cancelada = if (!tipo.episodica) cancelada else false,
         statusData = statusDataFinal,
         dataPrincipal = if (statusDataFinal == StatusData.DEFINIDA) parseData(dataTexto) else null,
         diaLancamento = if (episodica && lancando) diaLancamento.ifBlank { null } else null,
         horarioLancamento = if (episodica && lancando) formatarHorario(horarioLancamento) else null,
-        temporadasDisponiveis = if (dispVisivel) temporadasDisponiveis.toIntOrNull() ?: 0 else 0,
+        temporadasDisponiveis = temporadasCalc,
         temporadaAtual = if (progVisivel) temporadaAtual.toIntOrNull() ?: 0 else 0,
         episodiosDispTempAtual = if (progVisivel) episodiosDispTempAtual.toIntOrNull() ?: 0 else 0,
         ultimoEpisodioVisto = if (progVisivel) ultimoEpisodioVisto.toIntOrNull() ?: 0 else 0,
@@ -209,6 +240,17 @@ fun Midia.toDraft(): FormDraft = FormDraft(
     streamingPrincipal = streamingPrincipal,
     cinemaRede = cinemaRede,
     statusLancEpisodico = statusLancEpisodico,
+    vaiLancarTipo = if (statusLancEpisodico == StatusLancEpisodico.VAI_LANCAR) {
+        if (temporadasDisponiveis > 0) VaiLancarTipo.TEMPORADA_NOVA else VaiLancarTipo.SERIE_NOVA
+    } else {
+        null
+    },
+    novaTemporada = if (statusLancEpisodico == StatusLancEpisodico.VAI_LANCAR && temporadasDisponiveis > 0) {
+        (temporadasDisponiveis + 1).toString()
+    } else {
+        ""
+    },
+    cancelada = cancelada,
     statusData = statusData,
     dataTexto = dataPrincipal?.paraDigitos() ?: "",
     diaLancamento = diaLancamento ?: "",

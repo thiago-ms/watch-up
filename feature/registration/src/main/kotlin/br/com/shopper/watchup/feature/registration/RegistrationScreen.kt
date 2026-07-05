@@ -56,6 +56,7 @@ import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import br.com.shopper.watchup.core.data.domain.disponibilidadeVisivel
+import br.com.shopper.watchup.core.data.domain.permiteVisto
 import br.com.shopper.watchup.core.data.domain.progressoVisivel
 import br.com.shopper.watchup.core.data.model.Contexto
 import br.com.shopper.watchup.core.data.model.Modalidade
@@ -371,16 +372,60 @@ private fun PassoDatasStatus(d: FormDraft, onChange: (FormDraft) -> Unit) {
                     onClick = {
                         val novoStatusData =
                             if (s == StatusLancEpisodico.VAI_LANCAR) null else StatusData.NAO_APLICA
-                        onChange(d.copy(statusLancEpisodico = s, statusData = novoStatusData))
+                        onChange(
+                            d.copy(
+                                statusLancEpisodico = s,
+                                statusData = novoStatusData,
+                                vaiLancarTipo = if (s == StatusLancEpisodico.VAI_LANCAR) d.vaiLancarTipo else null,
+                                novaTemporada = if (s == StatusLancEpisodico.VAI_LANCAR) d.novaTemporada else "",
+                            ),
+                        )
                     },
                     label = { Text(s.rotulo) },
                 )
             }
         }
+
+        // "Vai lançar": série nova × temporada nova.
+        if (d.statusLancEpisodico == StatusLancEpisodico.VAI_LANCAR) {
+            Spacer(Modifier.height(8.dp))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                VaiLancarTipo.entries.forEach { t ->
+                    FilterChip(
+                        selected = d.vaiLancarTipo == t,
+                        onClick = { onChange(d.copy(vaiLancarTipo = t)) },
+                        label = { Text(t.rotulo) },
+                    )
+                }
+            }
+            if (d.vaiLancarTipo == VaiLancarTipo.TEMPORADA_NOVA) {
+                CampoNumero("Número da nova temporada", d.novaTemporada) { onChange(d.copy(novaTemporada = it)) }
+            }
+        }
         Spacer(Modifier.height(16.dp))
     }
 
-    // Status da data — só quando não-episódica ou episódica "vai lançar".
+    // Filme (não-episódica): opção de cancelado.
+    if (!d.episodica) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .toggleable(
+                    value = d.cancelada,
+                    role = Role.Checkbox,
+                    onValueChange = { onChange(d.copy(cancelada = it)) },
+                )
+                .padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Checkbox(checked = d.cancelada, onCheckedChange = null)
+            Spacer(Modifier.width(8.dp))
+            Text("Cancelado")
+        }
+        Spacer(Modifier.height(8.dp))
+    }
+
+    // Status da data — só quando não-episódica não cancelada, ou episódica "vai lançar".
     if (statusDataVisivel(d)) {
         Text("Status da data", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(8.dp))
@@ -448,7 +493,7 @@ private fun PassoDatasStatus(d: FormDraft, onChange: (FormDraft) -> Unit) {
     } else {
         listOf(StatusUsuario.QUERO_ASSISTIR, StatusUsuario.VISTO)
     }
-    val vistoBloqueado = d.episodica && d.statusLancEpisodico != StatusLancEpisodico.COMPLETA
+    val vistoBloqueado = d.tipo != null && !permiteVisto(d.tipo, d.statusLancEpisodico)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         opcoes.forEach { s ->
             val bloqueado = s == StatusUsuario.VISTO && vistoBloqueado
@@ -458,7 +503,7 @@ private fun PassoDatasStatus(d: FormDraft, onChange: (FormDraft) -> Unit) {
                 onClick = { if (!bloqueado) onChange(d.copy(statusUsuario = s)) },
                 label = { Text(s.rotulo) },
                 trailingIcon = if (bloqueado) {
-                    { Icon(Icons.Filled.Lock, contentDescription = "Requer status Completa", modifier = Modifier.height(16.dp)) }
+                    { Icon(Icons.Filled.Lock, contentDescription = "Requer status Completa ou Cancelada", modifier = Modifier.height(16.dp)) }
                 } else {
                     null
                 },
@@ -466,7 +511,7 @@ private fun PassoDatasStatus(d: FormDraft, onChange: (FormDraft) -> Unit) {
         }
     }
     if (vistoBloqueado) {
-        Text("Requer status Completa", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Requer status Completa ou Cancelada", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 
     // Progresso
@@ -535,7 +580,18 @@ private fun PassoConfirmar(d: FormDraft, erroSalvar: Boolean) {
             Resumo("Gênero", d.genero.ifBlank { "Sem gênero" })
             Resumo("Contexto", d.contexto?.rotulo)
             Resumo("Onde assistir", resumoOnde(d))
-            if (d.episodica) Resumo("Status de lançamento", d.statusLancEpisodico?.rotulo)
+            if (d.episodica) {
+                Resumo("Status de lançamento", d.statusLancEpisodico?.rotulo)
+                if (d.statusLancEpisodico == StatusLancEpisodico.VAI_LANCAR && d.vaiLancarTipo != null) {
+                    val detalhe = if (d.vaiLancarTipo == VaiLancarTipo.TEMPORADA_NOVA) {
+                        "Temporada nova (nº ${d.novaTemporada})"
+                    } else {
+                        "Série nova"
+                    }
+                    Resumo("Vai lançar", detalhe)
+                }
+            }
+            if (!d.episodica && d.cancelada) Resumo("Situação", "Cancelado")
             if (statusDataVisivel(d)) {
                 Resumo("Status da data", d.statusData?.rotulo)
                 if (d.statusData == StatusData.DEFINIDA) {

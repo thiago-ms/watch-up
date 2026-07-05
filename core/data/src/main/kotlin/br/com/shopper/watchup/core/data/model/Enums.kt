@@ -37,6 +37,7 @@ enum class StatusLancEpisodico(val rotulo: String) {
     COMPLETA("Completa"),
     LANCANDO("Lançando"),
     VAI_LANCAR("Vai lançar"),
+    CANCELADA("Cancelada"),
 }
 
 enum class StatusData(val rotulo: String) {
@@ -52,6 +53,7 @@ enum class StatusMidia(val rotulo: String) {
     EM_CARTAZ("Em cartaz"),
     EM_BREVE("Em breve"),
     FINALIZADA("Finalizada"),
+    CANCELADA("Cancelado"),
 }
 
 enum class StatusUsuario(val rotulo: String) {

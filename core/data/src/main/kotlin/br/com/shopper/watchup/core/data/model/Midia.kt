@@ -28,6 +28,7 @@ data class Midia(
 
     // Datas e status de lançamento
     val statusLancEpisodico: StatusLancEpisodico? = null, // só episódica
+    val cancelada: Boolean = false, // cancelamento de não-episódica (filme etc.)
     val statusData: StatusData,
     val dataPrincipal: LocalDate? = null, // aceita passado/futuro
     val diaLancamento: String? = null, // só episódica LANCANDO
