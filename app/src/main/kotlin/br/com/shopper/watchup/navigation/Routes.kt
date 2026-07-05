@@ -1,7 +1,6 @@
 package br.com.shopper.watchup.navigation
 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.VideoLibrary
@@ -13,10 +12,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
  */
 object Routes {
     const val HOME = "home"
-    const val LAUNCHES = "launches"
     const val SEARCH = "search"
     const val LIBRARY = "library"
 
+    const val SETTINGS = "settings"
     const val DETAIL = "detail/{midiaId}"
     const val PROGRESS = "progress/{midiaId}"
     const val REGISTRATION_NEW = "registration/new"
@@ -35,9 +34,8 @@ object Routes {
 /** Aba do bottom navigation. A ordem define a posição na barra. */
 enum class TabDestination(val route: String, val label: String, val icon: ImageVector) {
     HOME(Routes.HOME, "Início", Icons.Filled.Home),
-    LAUNCHES(Routes.LAUNCHES, "Lançamentos", Icons.Filled.CalendarMonth),
-    SEARCH(Routes.SEARCH, "Buscar", Icons.Filled.Search),
     LIBRARY(Routes.LIBRARY, "Biblioteca", Icons.Filled.VideoLibrary),
+    SEARCH(Routes.SEARCH, "Buscar", Icons.Filled.Search),
 }
 
 val TAB_ROUTES: Set<String> = TabDestination.entries.map { it.route }.toSet()

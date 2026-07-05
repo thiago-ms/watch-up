@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "br.com.shopper.watchup.feature.launches"
+    namespace = "br.com.shopper.watchup.feature.settings"
     compileSdk = 35
     buildToolsVersion = "35.0.0"
 
@@ -30,9 +30,12 @@ android {
 }
 
 dependencies {
-    // :core:ui reexporta o BOM do Compose, o Material 3 e o :core:data (domínio/repositório).
+    // :core:ui reexporta o BOM do Compose, o Material 3 e o :core:data (repositório).
     implementation(project(":core:ui"))
 
     implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.activity.compose) // rememberLauncherForActivityResult
+    implementation(libs.androidx.documentfile) // acesso SAF a arquivos/pastas
+    implementation(libs.androidx.work.runtime.ktx) // backup automático em segundo plano
     implementation(libs.kotlinx.coroutines.android)
 }

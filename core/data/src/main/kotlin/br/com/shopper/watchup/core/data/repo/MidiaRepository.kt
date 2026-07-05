@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import br.com.shopper.watchup.core.data.db.MidiaDao
 import br.com.shopper.watchup.core.data.db.WatchUpDatabase
+import br.com.shopper.watchup.core.data.domain.BackupSerializer
 import br.com.shopper.watchup.core.data.model.EpisodiosTemporada
 import br.com.shopper.watchup.core.data.model.Midia
 import kotlinx.coroutines.flow.Flow
@@ -26,6 +27,12 @@ interface MidiaRepository {
     suspend fun salvar(midia: Midia): Long
     suspend fun remover(midia: Midia)
     suspend fun salvarEpisodios(episodios: EpisodiosTemporada)
+
+    /** Backup: serializa toda a biblioteca (mídias + episódios) em JSON. */
+    suspend fun exportarJson(): String
+
+    /** Restauração: substitui toda a biblioteca pelo conteúdo do JSON. */
+    suspend fun importarJson(json: String)
 
     companion object {
         @Volatile
@@ -74,4 +81,15 @@ class RoomMidiaRepository(
 
     override suspend fun salvarEpisodios(episodios: EpisodiosTemporada) =
         dao.salvarEpisodios(episodios)
+
+    override suspend fun exportarJson(): String =
+        BackupSerializer.toJson(dao.listarTodas(), dao.listarTodosEpisodios())
+
+    override suspend fun importarJson(json: String) {
+        val (midias, episodios) = BackupSerializer.fromJson(json)
+        dao.limparEpisodios()
+        dao.limparMidias()
+        midias.forEach { dao.inserir(it) }
+        episodios.forEach { dao.salvarEpisodios(it) }
+    }
 }

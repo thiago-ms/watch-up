@@ -13,8 +13,8 @@ android {
         applicationId = "br.com.shopper.watchup"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        versionName = "1.4"
+        versionCode = 7
+        versionName = "1.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -51,10 +51,10 @@ dependencies {
     implementation(project(":core:data"))
     implementation(project(":feature:home"))
     implementation(project(":feature:library"))
-    implementation(project(":feature:launches"))
     implementation(project(":feature:search"))
     implementation(project(":feature:detail"))
     implementation(project(":feature:registration"))
+    implementation(project(":feature:settings"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)

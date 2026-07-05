@@ -9,6 +9,8 @@ composeBom = "2024.09.03"
 navigationCompose = "2.8.2"
 coroutines = "1.8.1"
 room = "2.6.1"
+documentfile = "1.0.1"
+work = "2.9.1"
 junit = "4.13.2"
 
 [libraries]
@@ -31,6 +33,8 @@ kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-cor
 androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
 androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
 androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
+androidx-documentfile = { group = "androidx.documentfile", name = "documentfile", version.ref = "documentfile" }
+androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "work" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 
 [plugins]

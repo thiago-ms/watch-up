@@ -20,6 +20,19 @@ interface MidiaDao {
     @Query("SELECT * FROM midia WHERE id = :id")
     fun observarPorId(id: Long): Flow<Midia?>
 
+    // Snapshots pontuais para export/import de backup.
+    @Query("SELECT * FROM midia")
+    suspend fun listarTodas(): List<Midia>
+
+    @Query("SELECT * FROM episodios_temporada")
+    suspend fun listarTodosEpisodios(): List<EpisodiosTemporada>
+
+    @Query("DELETE FROM midia")
+    suspend fun limparMidias()
+
+    @Query("DELETE FROM episodios_temporada")
+    suspend fun limparEpisodios()
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun inserir(midia: Midia): Long
 

@@ -25,10 +25,10 @@ import androidx.navigation.navArgument
 import br.com.shopper.watchup.feature.detail.DetailScreen
 import br.com.shopper.watchup.feature.detail.ProgressScreen
 import br.com.shopper.watchup.feature.home.HomeScreen
-import br.com.shopper.watchup.feature.launches.LaunchesScreen
 import br.com.shopper.watchup.feature.library.LibraryScreen
 import br.com.shopper.watchup.feature.registration.RegistrationScreen
 import br.com.shopper.watchup.feature.search.SearchScreen
+import br.com.shopper.watchup.feature.settings.SettingsScreen
 
 /**
  * Casca de navegação (§2): bottom navigation com 4 abas + FAB central de cadastro.
@@ -83,11 +83,6 @@ fun WatchUpApp() {
                     onAdicionar = { navController.navigate(Routes.REGISTRATION_NEW) },
                 )
             }
-            composable(Routes.LAUNCHES) {
-                LaunchesScreen(
-                    onOpenDetail = { id -> navController.navigate(Routes.detail(id)) },
-                )
-            }
             composable(Routes.SEARCH) {
                 SearchScreen()
             }
@@ -95,7 +90,11 @@ fun WatchUpApp() {
                 LibraryScreen(
                     onOpenDetail = { id -> navController.navigate(Routes.detail(id)) },
                     onAdicionar = { navController.navigate(Routes.REGISTRATION_NEW) },
+                    onAbrirConfig = { navController.navigate(Routes.SETTINGS) },
                 )
+            }
+            composable(Routes.SETTINGS) {
+                SettingsScreen(onBack = { navController.popBackStack() })
             }
 
             composable(
