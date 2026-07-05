@@ -18,7 +18,7 @@ val tmdbApiKey: String = run {
 }
 
 android {
-    namespace = "br.com.shopper.watchup.feature.search"
+    namespace = "br.com.watchup.feature.search"
     compileSdk = 35
     buildToolsVersion = "35.0.0"
 

@@ -3,7 +3,7 @@
 # adb.sh — roda o adb SEMPRE via Docker (imagem de build do projeto), com
 # passthrough de USB. NUNCA instala nada no host.
 #
-# A imagem `siteblocker-android-build:latest` já traz o Android SDK completo
+# A imagem `watchup-android-build:latest` já traz o Android SDK completo
 # (adb em /opt/android-sdk/platform-tools/adb). Este script sobe um container
 # de longa duração que mantém o servidor adb vivo e o reaproveita.
 #
@@ -11,16 +11,17 @@
 #   ./adb.sh devices                 lista os dispositivos
 #   ./adb.sh authorize               sobe o servidor e espera você autorizar no celular
 #   ./adb.sh install [caminho.apk]   instala o APK (padrão: mais recente em dist/)
-#   ./adb.sh build-install           gera o APK (gradle distApk) e instala
+#   ./adb.sh build-install           gera o APK debug (gradle distApk) e instala
+#   ./adb.sh build-install-release   gera o APK release (distReleaseApk) e instala
 #   ./adb.sh logcat                  segue os logs do app
 #   ./adb.sh reset                   derruba o container e apaga a autorização (.adb/)
 #   ./adb.sh <args...>               repassa qualquer comando ao adb (ex.: ./adb.sh shell date)
 #
 set -euo pipefail
 
-IMAGE="siteblocker-android-build:latest"
-CONTAINER="siteblocker-adb"
-PKG="br.com.shopper.siteblocker"
+IMAGE="watchup-android-build:latest"
+CONTAINER="watchup-adb"
+PKG="br.com.watchup"
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ADBHOME="$PROJECT_DIR/.adb"   # chave adb persistente (fora do git)
@@ -63,7 +64,7 @@ install_apk() {
   blue ">> instalando $(basename "$apk")..."
   out="$(adb install -r "$cpath" 2>&1)"; echo "$out"
   if echo "$out" | grep -q "INSTALL_FAILED_UPDATE_INCOMPATIBLE"; then
-    red ">> assinatura divergente; desinstalando e reinstalando (apaga dados + consentimento da VPN)..."
+    red ">> assinatura divergente; desinstalando e reinstalando (apaga dados do app)..."
     adb uninstall "$PKG" >/dev/null 2>&1 || true
     adb install "$cpath"
   fi
@@ -111,11 +112,19 @@ case "$cmd" in
     ;;
 
   build-install)
-    blue ">> gerando APK (gradle distApk via Docker)..."
+    blue ">> gerando APK debug (gradle distApk via Docker)..."
     docker compose run --rm --user "$(id -u):$(id -g)" android \
       ./gradlew --no-daemon --console=plain distApk
     ensure_server; require_authorized
-    install_apk "$(ls -t "$PROJECT_DIR"/dist/*.apk | head -1)"
+    install_apk "$(ls -t "$PROJECT_DIR"/dist/*-debug.apk | head -1)"
+    ;;
+
+  build-install-release)
+    blue ">> gerando APK release (gradle distReleaseApk via Docker)..."
+    docker compose run --rm --user "$(id -u):$(id -g)" android \
+      ./gradlew --no-daemon --console=plain distReleaseApk
+    ensure_server; require_authorized
+    install_apk "$(ls -t "$PROJECT_DIR"/dist/*-release.apk | head -1)"
     ;;
 
   logcat)

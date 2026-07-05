@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "br.com.shopper.watchup.feature.registration"
+    namespace = "br.com.watchup.feature.registration"
     compileSdk = 35
     buildToolsVersion = "35.0.0"
 

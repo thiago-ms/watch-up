@@ -16,5 +16,16 @@ local.properties
 captures/
 dist/
 
+# adb (autorização do dispositivo, fora do git)
+.adb/
+
+# Keystore de release e credenciais (fora do git)
+keystore/
+*.jks
+*.keystore
+
 # SO
 .DS_Store
+
+# Extra
+.kotlin

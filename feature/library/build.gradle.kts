@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "br.com.shopper.watchup.feature.library"
+    namespace = "br.com.watchup.feature.library"
     compileSdk = 35
     buildToolsVersion = "35.0.0"
 

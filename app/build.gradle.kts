@@ -1,31 +1,63 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
 }
 
+// Assinatura de release: se existir keystore/keystore.properties (fora do git),
+// usa a keystore real; caso contrário o release cai na keystore de debug — assim
+// o APK release já sai instalável. Rode `make keystore` para gerar uma dedicada.
+val keystorePropsFile = rootProject.file("keystore/keystore.properties")
+val temKeystore = keystorePropsFile.exists()
+val keystoreProps = Properties().apply {
+    if (temKeystore) keystorePropsFile.inputStream().use { load(it) }
+}
+
 android {
-    namespace = "br.com.shopper.watchup"
+    namespace = "br.com.watchup"
     compileSdk = 35
     buildToolsVersion = "35.0.0"
 
     defaultConfig {
-        applicationId = "br.com.shopper.watchup"
+        applicationId = "br.com.watchup"
         minSdk = 26
         targetSdk = 35
-        versionCode = 8
-        versionName = "1.7"
+        versionCode = 9
+        versionName = "1.8"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        if (temKeystore) {
+            create("release") {
+                storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // R8: remove código morto + encolhe recursos. Se adicionar libs que
+            // usam reflexão/serialização, mantenha as regras em proguard-rules.pro.
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            // Com keystore de release usa ela; sem ela, assina com a de debug para
+            // o APK já sair instalável (sideload).
+            signingConfig = if (temKeystore) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 
@@ -79,4 +111,15 @@ tasks.register<Copy>("distApk") {
     into(rootProject.layout.projectDirectory.dir("dist"))
     rename { "watchup-$version-debug.apk" }
     doLast { println(">> APK versionado em: dist/watchup-$version-debug.apk") }
+}
+
+// Idem para o release (assinado + R8). Sai em dist/ com sufixo -release, então é
+// listado pelo server.sh e instalável pelo adb.sh igual ao debug.
+tasks.register<Copy>("distReleaseApk") {
+    dependsOn("assembleRelease")
+    val version = android.defaultConfig.versionName
+    from(layout.buildDirectory.file("outputs/apk/release/app-release.apk"))
+    into(rootProject.layout.projectDirectory.dir("dist"))
+    rename { "watchup-$version-release.apk" }
+    doLast { println(">> APK versionado em: dist/watchup-$version-release.apk") }
 }

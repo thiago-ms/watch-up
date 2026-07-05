@@ -88,7 +88,7 @@ a tela de Conta evita exibir o e-mail (mostra nome ou apenas "Conectado").
 Pré-requisito **do usuário**: criar o **OAuth Client ID Android** no Google Cloud:
 - projeto GCP com **Drive API habilitada**;
 - **tela de consentimento** configurada;
-- OAuth client Android com package **`br.com.shopper.watchup`** + **SHA-1** da
+- OAuth client Android com package **`br.com.watchup`** + **SHA-1** da
   chave de assinatura (o SHA-1 do keystore debug pode ser extraído do container e
   repassado; o registro no GCP é feito pelo usuário).
 

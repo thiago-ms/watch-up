@@ -9,7 +9,7 @@ progresso episódico e radar de lançamentos), implementado a partir da
 - **Persistência:** Room (local-only no MVP; `MidiaRepository` é interface para
   futura sincronização remota sem tocar na UI)
 - **Build:** 100% via Docker (não precisa instalar JDK/Gradle/Android SDK no host)
-- **Package base:** `br.com.shopper.watchup` · minSdk 26 · targetSdk 35
+- **Package base:** `br.com.watchup` · minSdk 26 · targetSdk 35
 
 ## Arquitetura de módulos
 
