@@ -84,7 +84,11 @@ fun WatchUpApp() {
                 )
             }
             composable(Routes.SEARCH) {
-                SearchScreen()
+                SearchScreen(
+                    onSelecionar = { titulo, ano, tipoNome, posterUrl ->
+                        navController.navigate(Routes.registrationPrefill(titulo, ano, tipoNome, posterUrl))
+                    },
+                )
             }
             composable(Routes.LIBRARY) {
                 LibraryScreen(
@@ -116,11 +120,24 @@ fun WatchUpApp() {
                 val id = entry.arguments?.getLong(Routes.ARG_MIDIA_ID) ?: return@composable
                 ProgressScreen(midiaId = id, onBack = { navController.popBackStack() })
             }
-            composable(Routes.REGISTRATION_NEW) {
+            composable(
+                route = Routes.REGISTRATION_NEW_ROUTE,
+                arguments = listOf(
+                    navArgument(Routes.ARG_TITULO) { type = NavType.StringType; nullable = true; defaultValue = null },
+                    navArgument(Routes.ARG_ANO) { type = NavType.StringType; nullable = true; defaultValue = null },
+                    navArgument(Routes.ARG_TIPO) { type = NavType.StringType; nullable = true; defaultValue = null },
+                    navArgument(Routes.ARG_POSTER) { type = NavType.StringType; nullable = true; defaultValue = null },
+                ),
+            ) { entry ->
+                val args = entry.arguments
                 RegistrationScreen(
                     midiaId = null,
                     onBack = { navController.popBackStack() },
                     onSalvo = { id -> navController.aposCadastro(id) },
+                    prefTitulo = args?.getString(Routes.ARG_TITULO),
+                    prefAno = args?.getString(Routes.ARG_ANO),
+                    prefTipo = args?.getString(Routes.ARG_TIPO),
+                    prefPosterUrl = args?.getString(Routes.ARG_POSTER),
                 )
             }
             composable(

@@ -180,6 +180,7 @@ private fun ContinuarCard(midia: Midia, onClick: () -> Unit, modifier: Modifier 
         Column(Modifier.padding(12.dp)) {
             MediaPoster(
                 titulo = midia.titulo,
+                posterUrl = midia.posterUrl,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(96.dp),
@@ -212,7 +213,7 @@ private fun LancamentoRow(midia: Midia, onClick: () -> Unit) {
             modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            MediaPoster(titulo = midia.titulo, modifier = Modifier.size(48.dp))
+            MediaPoster(titulo = midia.titulo, posterUrl = midia.posterUrl, modifier = Modifier.size(48.dp))
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(midia.titulo, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)

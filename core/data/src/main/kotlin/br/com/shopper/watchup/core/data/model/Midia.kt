@@ -19,6 +19,7 @@ data class Midia(
     val ano: Int? = null,
     val genero: String,
     val contexto: Contexto,
+    val posterUrl: String? = null, // pôster do TMDB (quando cadastrada via busca)
 
     // Onde assistir (modalidade + detalhe)
     val modalidade: Modalidade,

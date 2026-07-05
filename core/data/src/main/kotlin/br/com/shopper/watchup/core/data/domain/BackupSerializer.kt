@@ -70,6 +70,7 @@ object BackupSerializer {
         putN("ano", m.ano)
         put("genero", m.genero)
         put("contexto", m.contexto.name)
+        putN("posterUrl", m.posterUrl)
         put("modalidade", m.modalidade.name)
         put("streamings", JSONArray(m.streamings))
         putN("streamingPrincipal", m.streamingPrincipal)
@@ -94,6 +95,7 @@ object BackupSerializer {
         ano = o.intOrNull("ano"),
         genero = o.getString("genero"),
         contexto = Contexto.valueOf(o.getString("contexto")),
+        posterUrl = o.strOrNull("posterUrl"),
         modalidade = Modalidade.valueOf(o.getString("modalidade")),
         streamings = o.optJSONArray("streamings")?.let { arr ->
             (0 until arr.length()).map { arr.getString(it) }

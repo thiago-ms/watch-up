@@ -65,6 +65,7 @@ import br.com.shopper.watchup.core.data.model.STREAMINGS_DISPONIVEIS
 import br.com.shopper.watchup.core.data.model.StatusData
 import br.com.shopper.watchup.core.data.model.StatusLancEpisodico
 import br.com.shopper.watchup.core.data.model.StatusUsuario
+import br.com.shopper.watchup.core.data.model.TipoMidia
 import br.com.shopper.watchup.core.data.repo.MidiaRepository
 import br.com.shopper.watchup.core.ui.component.PushScreenScaffold
 import br.com.shopper.watchup.core.ui.component.formatarData
@@ -83,6 +84,11 @@ fun RegistrationScreen(
     onBack: () -> Unit,
     onSalvo: (Long) -> Unit,
     passoInicial: Int = 0,
+    // Pré-preenchimento vindo da busca no TMDB (cadastro novo).
+    prefTitulo: String? = null,
+    prefAno: String? = null,
+    prefTipo: String? = null,
+    prefPosterUrl: String? = null,
 ) {
     val context = LocalContext.current
     val repo = remember { MidiaRepository.get(context) }
@@ -103,6 +109,15 @@ fun RegistrationScreen(
         if (midiaId != null) {
             repo.observarPorId(midiaId).first()?.let { draft = it.toDraft() }
             passoIndex = passoInicial.coerceIn(0, PassoCadastro.entries.lastIndex)
+        } else if (!prefTitulo.isNullOrBlank()) {
+            // Cadastro iniciado a partir de um resultado da busca: já traz título,
+            // ano, tipo e pôster; o usuário continua o wizard normalmente.
+            draft = FormDraft(
+                tipo = prefTipo?.let { runCatching { TipoMidia.valueOf(it) }.getOrNull() },
+                titulo = prefTitulo,
+                ano = prefAno.orEmpty(),
+                posterUrl = prefPosterUrl?.ifBlank { null },
+            )
         }
         iniciado = true
     }

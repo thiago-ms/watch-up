@@ -188,7 +188,7 @@ fun DetailScreen(
 @Composable
 private fun Cabecalho(m: Midia) {
     Row {
-        MediaPoster(titulo = m.titulo, modifier = Modifier.size(width = 96.dp, height = 128.dp))
+        MediaPoster(titulo = m.titulo, posterUrl = m.posterUrl, modifier = Modifier.size(width = 96.dp, height = 128.dp))
         Spacer(Modifier.width(16.dp))
         Column {
             Text(m.titulo, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)

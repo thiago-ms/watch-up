@@ -153,6 +153,7 @@ private fun LibraryCell(midia: Midia, onClick: () -> Unit) {
         Box {
             MediaPoster(
                 titulo = midia.titulo,
+                posterUrl = midia.posterUrl,
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(0.7f),

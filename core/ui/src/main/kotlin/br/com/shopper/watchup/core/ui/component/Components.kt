@@ -35,8 +35,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import coil.compose.SubcomposeAsyncImage
 import br.com.shopper.watchup.core.data.domain.estaEmDia
 import br.com.shopper.watchup.core.data.domain.statusExibicao
 import br.com.shopper.watchup.core.data.model.Midia
@@ -92,9 +94,28 @@ fun SectionHeader(title: String, trailing: String? = null, modifier: Modifier = 
     }
 }
 
-/** Pôster placeholder: bloco colorido derivado do título, com a inicial. */
+/**
+ * Pôster da mídia. Com [posterUrl] (ex.: TMDB) carrega a imagem via Coil; sem ele
+ * — ou enquanto carrega/em erro — cai no placeholder colorido derivado do título.
+ */
 @Composable
-fun MediaPoster(titulo: String, modifier: Modifier = Modifier) {
+fun MediaPoster(titulo: String, modifier: Modifier = Modifier, posterUrl: String? = null) {
+    if (posterUrl.isNullOrBlank()) {
+        PosterPlaceholder(titulo, modifier)
+        return
+    }
+    SubcomposeAsyncImage(
+        model = posterUrl,
+        contentDescription = titulo,
+        modifier = modifier.clip(RoundedCornerShape(12.dp)),
+        contentScale = ContentScale.Crop,
+        loading = { PosterPlaceholder(titulo, Modifier.fillMaxSize()) },
+        error = { PosterPlaceholder(titulo, Modifier.fillMaxSize()) },
+    )
+}
+
+@Composable
+private fun PosterPlaceholder(titulo: String, modifier: Modifier = Modifier) {
     val paleta = listOf(
         Color(0xFF5B4BE8), Color(0xFF00897B), Color(0xFFD81B60),
         Color(0xFF3949AB), Color(0xFFF4511E), Color(0xFF6D4C41),

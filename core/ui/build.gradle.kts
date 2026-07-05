@@ -43,5 +43,8 @@ dependencies {
     api(libs.androidx.material3)
     api(libs.androidx.material.icons.extended)
 
+    // Carregamento de imagens de URL (pôsteres do TMDB) exposto a todas as features.
+    api(libs.coil.compose)
+
     debugImplementation(libs.androidx.ui.tooling)
 }
