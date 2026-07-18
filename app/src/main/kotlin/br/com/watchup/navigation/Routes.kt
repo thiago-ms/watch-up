@@ -17,6 +17,7 @@ object Routes {
     const val LIBRARY = "library"
 
     const val SETTINGS = "settings"
+    const val ARCHIVE = "archive"
     const val DETAIL = "detail/{midiaId}"
     const val PROGRESS = "progress/{midiaId}"
 

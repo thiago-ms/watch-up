@@ -2,6 +2,10 @@ package br.com.watchup.core.data.repo
 
 import android.content.Context
 import androidx.room.Room
+import br.com.watchup.core.data.db.MIGRATION_4_5
+import br.com.watchup.core.data.db.MIGRATION_5_6
+import br.com.watchup.core.data.db.MIGRATION_6_7
+import br.com.watchup.core.data.db.MIGRATION_7_8
 import br.com.watchup.core.data.db.MidiaDao
 import br.com.watchup.core.data.db.WatchUpDatabase
 import br.com.watchup.core.data.domain.BackupSerializer
@@ -47,7 +51,9 @@ interface MidiaRepository {
                         WatchUpDatabase::class.java,
                         "watchup.db",
                     )
-                        // MVP local: sem migração incremental — recria o banco no upgrade de schema.
+                        // Migrações explícitas onde vale preservar dados; nos demais
+                        // upgrades sem migração registrada, recria o banco.
+                        .addMigrations(MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                         .fallbackToDestructiveMigration()
                         .build()
                     RoomMidiaRepository(db.midiaDao()).also { instance = it }

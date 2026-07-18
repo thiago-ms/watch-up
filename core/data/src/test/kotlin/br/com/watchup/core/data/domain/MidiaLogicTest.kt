@@ -40,6 +40,8 @@ class MidiaLogicTest {
         statusUsuario: StatusUsuario = StatusUsuario.QUERO_ASSISTIR,
         disp: Int = 0,
         visto: Int = 0,
+        temporadasDisp: Int = if (disp > 0) 1 else 0,
+        diaLancamento: String? = null,
     ) = Midia(
         tipo = TipoMidia.SERIE,
         titulo = "S",
@@ -50,6 +52,8 @@ class MidiaLogicTest {
         streamingPrincipal = "Netflix",
         statusLancEpisodico = statusLancEp,
         statusData = StatusData.NAO_APLICA,
+        diaLancamento = diaLancamento,
+        temporadasDisponiveis = temporadasDisp,
         temporadaAtual = if (disp > 0) 1 else 0,
         episodiosDispTempAtual = disp,
         ultimoEpisodioVisto = visto,
@@ -137,22 +141,143 @@ class MidiaLogicTest {
         assertFalse(progressoVisivel(TipoMidia.FILME, null, StatusUsuario.ASSISTINDO))
     }
 
-    // Lançamentos --------------------------------------------------------------
+    // Janelas temporais (item 3) ---------------------------------------------
+    // hoje = quarta 2025-01-15. Semana (domingo→sábado): 12–18/jan; próxima: 19–25/jan.
     @Test
-    fun `data dentro de 7 dias cai em esta semana`() {
-        val m = filme(StatusData.DEFINIDA, hoje.plusDays(3))
-        assertEquals(SecaoLancamento.ESTA_SEMANA, secaoLancamento(m, hoje))
+    fun `data passada fica em cartaz`() {
+        val m = filme(StatusData.DEFINIDA, hoje.minusDays(2))
+        assertEquals(JanelaData.EM_CARTAZ, janelaData(m, hoje))
     }
 
     @Test
-    fun `data distante cai em proximas datas`() {
-        val m = filme(StatusData.DEFINIDA, hoje.plusDays(40))
-        assertEquals(SecaoLancamento.PROXIMAS_DATAS, secaoLancamento(m, hoje))
+    fun `data nesta semana-calendario cai em esta semana`() {
+        val m = filme(StatusData.DEFINIDA, LocalDate.of(2025, 1, 18)) // sábado desta semana
+        assertEquals(JanelaData.ESTA_SEMANA, janelaData(m, hoje))
+    }
+
+    @Test
+    fun `data na proxima semana-calendario cai em semana que vem`() {
+        val m = filme(StatusData.DEFINIDA, LocalDate.of(2025, 1, 20)) // segunda da semana seguinte
+        assertEquals(JanelaData.SEMANA_QUE_VEM, janelaData(m, hoje))
+    }
+
+    @Test
+    fun `data ainda neste mes cai em este mes`() {
+        val m = filme(StatusData.DEFINIDA, LocalDate.of(2025, 1, 28))
+        assertEquals(JanelaData.ESTE_MES, janelaData(m, hoje))
+    }
+
+    @Test
+    fun `data no mes seguinte cai em proximo mes`() {
+        val m = filme(StatusData.DEFINIDA, LocalDate.of(2025, 2, 10))
+        assertEquals(JanelaData.PROXIMO_MES, janelaData(m, hoje))
+    }
+
+    @Test
+    fun `data mais adiante no ano cai em este ano`() {
+        val m = filme(StatusData.DEFINIDA, LocalDate.of(2025, 6, 1))
+        assertEquals(JanelaData.ESTE_ANO, janelaData(m, hoje))
+    }
+
+    @Test
+    fun `data no ano seguinte cai em proximo ano`() {
+        val m = filme(StatusData.DEFINIDA, LocalDate.of(2026, 3, 1))
+        assertEquals(JanelaData.PROXIMO_ANO, janelaData(m, hoje))
+    }
+
+    @Test
+    fun `data muito distante cai em futuro distante`() {
+        val m = filme(StatusData.DEFINIDA, LocalDate.of(2030, 1, 1))
+        assertEquals(JanelaData.FUTURO_DISTANTE, janelaData(m, hoje))
     }
 
     @Test
     fun `sem data definida cai em sem data`() {
         val m = filme(StatusData.SEM_DATA, null)
-        assertEquals(SecaoLancamento.SEM_DATA, secaoLancamento(m, hoje))
+        assertEquals(JanelaData.SEM_DATA, janelaData(m, hoje))
+    }
+
+    @Test
+    fun `episodica lancando com dia da semana fica em cartaz`() {
+        // Bug: cadência semanal (dia definido) sem dataPrincipal caía em "Sem data".
+        val m = serie(StatusLancEpisodico.LANCANDO, disp = 8, visto = 3, diaLancamento = "Quinta")
+        assertEquals(JanelaData.EM_CARTAZ, janelaData(m, hoje))
+    }
+
+    @Test
+    fun `episodica lancando sem dia da semana continua sem data`() {
+        val m = serie(StatusLancEpisodico.LANCANDO, disp = 8, visto = 3, diaLancamento = null)
+        assertEquals(JanelaData.SEM_DATA, janelaData(m, hoje))
+    }
+
+    // Progresso acessível (itens 5 e 7) --------------------------------------
+    @Test
+    fun `vai lancar temporada nova assistida libera progresso`() {
+        // Nova temporada a caminho, mas há temporadas anteriores sendo assistidas.
+        val m = serie(
+            StatusLancEpisodico.VAI_LANCAR,
+            statusUsuario = StatusUsuario.ASSISTINDO,
+            temporadasDisp = 2,
+        )
+        assertTrue(progressoAcessivel(m))
+        assertTrue(temCardProgresso(m))
+    }
+
+    @Test
+    fun `vai lancar serie nova sem temporadas nao tem progresso`() {
+        val m = serie(
+            StatusLancEpisodico.VAI_LANCAR,
+            statusUsuario = StatusUsuario.ASSISTINDO,
+            temporadasDisp = 0,
+        )
+        assertFalse(progressoAcessivel(m))
+    }
+
+    @Test
+    fun `lancando assistindo com temporadas tem card de progresso`() {
+        val m = serie(StatusLancEpisodico.LANCANDO, statusUsuario = StatusUsuario.ASSISTINDO, disp = 10)
+        assertTrue(progressoAcessivel(m))
+    }
+
+    // Novos episódios (item 4) --------------------------------------------------
+    @Test
+    fun `lancando estima novos episodios pela cadencia semanal`() {
+        // Âncora 3 semanas atrás, cadência semanal → 3 novos episódios estimados.
+        val m = serie(StatusLancEpisodico.LANCANDO, disp = 8)
+            .copy(cadenciaDias = 7, dataBaseContagem = hoje.minusWeeks(3))
+        assertEquals(3, novosEpisodiosEstimados(m, hoje))
+    }
+
+    @Test
+    fun `sem data-base nao estima novos episodios`() {
+        val m = serie(StatusLancEpisodico.LANCANDO, disp = 8).copy(dataBaseContagem = null)
+        assertEquals(0, novosEpisodiosEstimados(m, hoje))
+    }
+
+    @Test
+    fun `data-base no mesmo dia nao estima novidade`() {
+        val m = serie(StatusLancEpisodico.LANCANDO, disp = 8).copy(dataBaseContagem = hoje)
+        assertEquals(0, novosEpisodiosEstimados(m, hoje))
+    }
+
+    @Test
+    fun `completa nao estima novos episodios`() {
+        val m = serie(StatusLancEpisodico.COMPLETA, disp = 8).copy(dataBaseContagem = hoje.minusWeeks(5))
+        assertEquals(0, novosEpisodiosEstimados(m, hoje))
+    }
+
+    @Test
+    fun `cadencia quinzenal reduz a contagem`() {
+        val m = serie(StatusLancEpisodico.LANCANDO, disp = 8)
+            .copy(cadenciaDias = 14, dataBaseContagem = hoje.minusWeeks(6)) // 6 semanas / 2 = 3
+        assertEquals(3, novosEpisodiosEstimados(m, hoje))
+    }
+
+    @Test
+    fun `vai lancar com estreia passada conta a partir do ep 1`() {
+        // Estreou há 2 semanas, cadência semanal, ainda sem episódios registrados.
+        val m = serie(StatusLancEpisodico.VAI_LANCAR, disp = 0)
+            .copy(statusData = StatusData.DEFINIDA, dataPrincipal = hoje.minusWeeks(2), dataBaseContagem = null)
+        assertEquals(3, novosEpisodiosEstimados(m, hoje)) // ep 1 na estreia + 2 semanas
     }
 }

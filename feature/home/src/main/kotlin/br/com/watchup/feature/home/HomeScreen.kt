@@ -39,17 +39,21 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import br.com.watchup.core.data.domain.FiltroLancamento
-import br.com.watchup.core.data.domain.SecaoLancamento
+import br.com.watchup.core.data.domain.JanelaData
 import br.com.watchup.core.data.domain.combinaFiltro
 import br.com.watchup.core.data.domain.deriveStatusMidia
 import br.com.watchup.core.data.domain.emAndamento
 import br.com.watchup.core.data.domain.episodiosFaltantes
 import br.com.watchup.core.data.domain.estaEmDia
 import br.com.watchup.core.data.domain.fracaoProgresso
-import br.com.watchup.core.data.domain.secaoLancamento
+import br.com.watchup.core.data.domain.janelaData
+import br.com.watchup.core.data.domain.novosEpisodiosEstimados
 import br.com.watchup.core.data.model.Midia
+import br.com.watchup.core.data.model.StatusUsuario
 import br.com.watchup.core.data.repo.MidiaRepository
+import java.time.LocalDate
 import br.com.watchup.core.ui.component.EmptyState
+import br.com.watchup.core.ui.component.JanelaTag
 import br.com.watchup.core.ui.component.LabeledProgressBar
 import br.com.watchup.core.ui.component.MediaPoster
 import br.com.watchup.core.ui.component.SectionHeader
@@ -58,8 +62,9 @@ import br.com.watchup.core.ui.component.formatarData
 
 /**
  * S001 — Início/Home. Reúne "Continuar assistindo" (mídias episódicas em
- * andamento) e o radar de Lançamentos (antiga aba, agora fundida aqui): filtros por
- * tipo de data + 3 seções (Esta semana · Próximas datas · Sem data definida).
+ * andamento) e o radar de Lançamentos: filtros por tipo de data + duas seções —
+ * "Em cartaz" (já estreou / no ar) e "Próximas datas" (unificada, cada item com a
+ * tag da sua janela temporal: esta semana, semana que vem, este mês, … , sem data).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -74,12 +79,30 @@ fun HomeScreen(
 
     var filtro by remember { mutableStateOf(FiltroLancamento.TODOS) }
 
-    val emAndamento = remember(todas) { emAndamento(todas.orEmpty()) }
-    val porSecao = remember(todas, filtro) {
-        val filtradas = todas.orEmpty().filter { combinaFiltro(it, filtro) }
-        SecaoLancamento.entries.associateWith { secao ->
-            filtradas.filter { secaoLancamento(it) == secao }
-        }
+    // Itens 9 e 8: arquivadas e intenções de assistir não aparecem na Home.
+    val ativas = remember(todas) { todas.orEmpty().filterNot { it.arquivada || it.intencao } }
+    val emAndamento = remember(ativas) { emAndamento(ativas) }
+    // Radar: cada mídia com sua janela temporal (item 3). "Em cartaz" é seção própria;
+    // as demais entram numa única seção "Próximas datas", cada uma com sua tag.
+    val radar = remember(ativas, filtro) {
+        // Item 1: mídias já vistas não entram no radar da Home.
+        ativas
+            .filter { it.statusUsuario != StatusUsuario.VISTO && combinaFiltro(it, filtro) }
+            .map { it to janelaData(it) }
+    }
+    val emCartaz = remember(radar) {
+        radar.filter { it.second == JanelaData.EM_CARTAZ }
+            .sortedWith(compareBy(nullsLast<LocalDate>()) { it.first.dataPrincipal })
+            .map { it.first }
+    }
+    // Item 2: ordenar por janela (mais próxima primeiro) e, dentro dela, por data;
+    // itens sem data fixa vão ao fim.
+    val proximas = remember(radar) {
+        radar.filter { it.second != JanelaData.EM_CARTAZ }
+            .sortedWith(
+                compareBy<Pair<Midia, JanelaData>> { it.second.prioridade }
+                    .thenComparing(compareBy(nullsLast<LocalDate>()) { it.first.dataPrincipal }),
+            )
     }
 
     Scaffold(
@@ -150,24 +173,37 @@ fun HomeScreen(
             }
             Spacer(Modifier.height(12.dp))
 
-            SecaoLancamento.entries.forEach { secao ->
-                val itens = porSecao[secao].orEmpty()
-                SectionHeader(secao.titulo, trailing = "${itens.size}")
+            // Seção "Em cartaz" — o que já estreou / está no ar.
+            if (emCartaz.isNotEmpty()) {
+                SectionHeader("Em cartaz", trailing = "${emCartaz.size}")
                 Spacer(Modifier.height(8.dp))
-                if (itens.isEmpty()) {
-                    Text(
-                        "Nenhum item neste filtro.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else {
-                    itens.forEach { midia ->
-                        LancamentoRow(midia = midia, onClick = { onOpenDetail(midia.id) })
-                        Spacer(Modifier.height(8.dp))
-                    }
+                emCartaz.forEach { midia ->
+                    LancamentoRow(midia = midia, onClick = { onOpenDetail(midia.id) })
+                    Spacer(Modifier.height(8.dp))
                 }
                 Spacer(Modifier.height(12.dp))
             }
+
+            // Seção unificada "Próximas datas" — cada item com a tag da sua janela.
+            SectionHeader("Próximas datas", trailing = "${proximas.size}")
+            Spacer(Modifier.height(8.dp))
+            if (proximas.isEmpty()) {
+                Text(
+                    "Nenhum item neste filtro.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                proximas.forEach { (midia, janela) ->
+                    LancamentoRow(
+                        midia = midia,
+                        janela = janela,
+                        onClick = { onOpenDetail(midia.id) },
+                    )
+                    Spacer(Modifier.height(8.dp))
+                }
+            }
+            Spacer(Modifier.height(12.dp))
         }
     }
 }
@@ -198,12 +234,35 @@ private fun ContinuarCard(midia: Midia, onClick: () -> Unit, modifier: Modifier 
                 fracao = fracaoProgresso(midia),
                 label = if (estaEmDia(midia)) "Em dia" else "Faltam ${episodiosFaltantes(midia)} ep.",
             )
+            // Item 4: indicação sutil de novos episódios estimados.
+            val novos = novosEpisodiosEstimados(midia)
+            if (novos > 0) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "+$novos novo(s) ep.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.tertiary,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
         }
     }
 }
 
+/**
+ * Subtítulo da linha de lançamento: para episódica "lançando" com dia/horário
+ * definidos mostra a cadência ("Toda Quinta · 20:00"); senão, a data formatada.
+ */
+private fun subtituloLancamento(m: Midia): String {
+    val cadencia = listOfNotNull(
+        m.diaLancamento?.takeIf { it.isNotBlank() }?.let { "Toda $it" },
+        m.horarioLancamento?.takeIf { it.isNotBlank() },
+    )
+    return if (cadencia.isNotEmpty()) cadencia.joinToString(" · ") else formatarData(m.dataPrincipal)
+}
+
 @Composable
-private fun LancamentoRow(midia: Midia, onClick: () -> Unit) {
+private fun LancamentoRow(midia: Midia, onClick: () -> Unit, janela: JanelaData? = null) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -218,12 +277,13 @@ private fun LancamentoRow(midia: Midia, onClick: () -> Unit) {
             Column(Modifier.weight(1f)) {
                 Text(midia.titulo, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
-                    formatarData(midia.dataPrincipal),
+                    subtituloLancamento(midia),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Box { StatusMidiaChip(deriveStatusMidia(midia)) }
+            // "Próximas datas" mostra a tag da janela; "Em cartaz" mostra o status.
+            Box { if (janela != null) JanelaTag(janela) else StatusMidiaChip(deriveStatusMidia(midia)) }
         }
     }
 }

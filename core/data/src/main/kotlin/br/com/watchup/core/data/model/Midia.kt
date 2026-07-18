@@ -40,9 +40,26 @@ data class Midia(
     val temporadaAtual: Int = 0,
     val episodiosDispTempAtual: Int = 0,
 
+    // Contagem de novos episódios (item 4): cadência em dias entre episódios
+    // (7 = semanal) e data-base a partir da qual o contador estima novos episódios.
+    // A data-base é reancorada sempre que a quantidade é atualizada; nula até haver
+    // âncora (aí cai na data de lançamento).
+    val cadenciaDias: Int = 7,
+    val dataBaseContagem: LocalDate? = null,
+
     // Progresso do usuário (só ASSISTINDO)
     val ultimoEpisodioVisto: Int = 0,
     val statusUsuario: StatusUsuario,
+
+    // Marcador de favorito (item 11) — independente de status/tipo.
+    val favorito: Boolean = false,
+
+    // Arquivada (item 9) — sai da biblioteca ativa e da Home; visível só no arquivo.
+    val arquivada: Boolean = false,
+
+    // Intenção de assistir (item 8) — cadastro parcial/rascunho; some da Home e da
+    // biblioteca ativa; a Biblioteca tem um modo que mostra só estes.
+    val intencao: Boolean = false,
 )
 
 /**

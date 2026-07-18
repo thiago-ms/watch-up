@@ -39,6 +39,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.SubcomposeAsyncImage
+import br.com.watchup.core.data.domain.JanelaData
 import br.com.watchup.core.data.domain.estaEmDia
 import br.com.watchup.core.data.domain.statusExibicao
 import br.com.watchup.core.data.model.Midia
@@ -168,6 +169,36 @@ fun StatusUsuarioChip(midia: Midia, modifier: Modifier = Modifier) {
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onPrimary,
+        )
+    }
+}
+
+/**
+ * Tag da janela temporal de um lançamento (item 3). A cor segue a prioridade da
+ * [JanelaData]: mais próxima = mais destaque (cores preenchidas vivas); mais
+ * distante = tons de container (apagados); "Sem data" = o mais neutro possível.
+ */
+@Composable
+fun JanelaTag(janela: JanelaData, modifier: Modifier = Modifier) {
+    val cor = MaterialTheme.colorScheme
+    val (bg, fg) = when (janela) {
+        JanelaData.EM_CARTAZ -> cor.primary to cor.onPrimary
+        JanelaData.ESTA_SEMANA -> cor.primary to cor.onPrimary
+        JanelaData.SEMANA_QUE_VEM -> cor.tertiary to cor.onTertiary
+        JanelaData.ESTE_MES -> cor.secondary to cor.onSecondary
+        JanelaData.PROXIMO_MES -> cor.primaryContainer to cor.onPrimaryContainer
+        JanelaData.ESTE_ANO -> cor.secondaryContainer to cor.onSecondaryContainer
+        JanelaData.PROXIMO_ANO -> cor.tertiaryContainer to cor.onTertiaryContainer
+        JanelaData.FUTURO_DISTANTE -> cor.surfaceVariant to cor.onSurfaceVariant
+        JanelaData.SEM_DATA -> cor.surfaceVariant to cor.onSurfaceVariant
+    }
+    Surface(modifier = modifier, shape = RoundedCornerShape(6.dp), color = bg) {
+        Text(
+            janela.rotulo,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = fg,
         )
     }
 }

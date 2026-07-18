@@ -81,11 +81,16 @@ object BackupSerializer {
         putN("dataPrincipal", m.dataPrincipal?.toString())
         putN("diaLancamento", m.diaLancamento)
         putN("horarioLancamento", m.horarioLancamento)
+        put("cadenciaDias", m.cadenciaDias)
+        putN("dataBaseContagem", m.dataBaseContagem?.toString())
         put("temporadasDisponiveis", m.temporadasDisponiveis)
         put("temporadaAtual", m.temporadaAtual)
         put("episodiosDispTempAtual", m.episodiosDispTempAtual)
         put("ultimoEpisodioVisto", m.ultimoEpisodioVisto)
         put("statusUsuario", m.statusUsuario.name)
+        put("favorito", m.favorito)
+        put("arquivada", m.arquivada)
+        put("intencao", m.intencao)
     }
 
     private fun midiaFromJson(o: JSONObject): Midia = Midia(
@@ -110,11 +115,16 @@ object BackupSerializer {
         dataPrincipal = o.strOrNull("dataPrincipal")?.let(LocalDate::parse),
         diaLancamento = o.strOrNull("diaLancamento"),
         horarioLancamento = o.strOrNull("horarioLancamento"),
+        cadenciaDias = o.optInt("cadenciaDias", 7),
+        dataBaseContagem = o.strOrNull("dataBaseContagem")?.let(LocalDate::parse),
         temporadasDisponiveis = o.optInt("temporadasDisponiveis", 0),
         temporadaAtual = o.optInt("temporadaAtual", 0),
         episodiosDispTempAtual = o.optInt("episodiosDispTempAtual", 0),
         ultimoEpisodioVisto = o.optInt("ultimoEpisodioVisto", 0),
         statusUsuario = StatusUsuario.valueOf(o.getString("statusUsuario")),
+        favorito = o.optBoolean("favorito", false),
+        arquivada = o.optBoolean("arquivada", false),
+        intencao = o.optBoolean("intencao", false),
     )
 
     private fun JSONObject.putN(key: String, value: Any?) {

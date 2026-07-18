@@ -39,6 +39,10 @@ data class FormDraft(
     val episodiosDispTempAtual: String = "",
     val ultimoEpisodioVisto: String = "",
     val statusUsuario: StatusUsuario? = null,
+    val favorito: Boolean = false, // preservado na edição (item 11); não é etapa do cadastro
+    val arquivada: Boolean = false, // preservado na edição (item 9); não é etapa do cadastro
+    val cadenciaDias: Int = 7, // item 4: cadência (editada no Detalhe, preservada aqui)
+    val dataBaseContagem: LocalDate? = null, // item 4: âncora da contagem (preservada)
 ) {
     val episodica: Boolean get() = tipo?.episodica == true
 }
@@ -181,7 +185,7 @@ private fun validarDatasStatus(d: FormDraft): String? {
 }
 
 /** Constrói a [Midia] a partir do rascunho, limpando campos que não se aplicam. */
-fun FormDraft.toMidia(id: Long = 0): Midia {
+fun FormDraft.toMidia(id: Long = 0, hoje: LocalDate = LocalDate.now()): Midia {
     val tipo = requireNotNull(tipo)
     val statusUsuario = requireNotNull(statusUsuario)
     val streaming = modalidade == Modalidade.STREAMING
@@ -226,6 +230,50 @@ fun FormDraft.toMidia(id: Long = 0): Midia {
         episodiosDispTempAtual = if (progVisivel) episodiosDispTempAtual.toIntOrNull() ?: 0 else 0,
         ultimoEpisodioVisto = if (progVisivel) ultimoEpisodioVisto.toIntOrNull() ?: 0 else 0,
         statusUsuario = statusUsuario,
+        favorito = favorito,
+        arquivada = arquivada,
+        cadenciaDias = cadenciaDias.coerceAtLeast(1),
+        // Item 4: "lançando" ancora a contagem — novo cadastro ancora na criação;
+        // edição preserva a âncora (ou cria uma se ainda não houver).
+        dataBaseContagem = when {
+            lancando && id == 0L -> hoje
+            lancando -> dataBaseContagem ?: hoje
+            else -> dataBaseContagem
+        },
+    )
+}
+
+/**
+ * Item 8 — "Salvar como intenção de assistir". Constrói uma [Midia] parcial a
+ * partir do que já foi preenchido, com defaults neutros para os campos ainda não
+ * informados (exige apenas tipo + título). Marca `intencao = true`; some da Home e
+ * da biblioteca ativa até o cadastro ser completado.
+ */
+fun FormDraft.toMidiaIntencao(id: Long = 0): Midia {
+    val tipo = requireNotNull(tipo)
+    val streaming = modalidade == Modalidade.STREAMING
+    val cinema = modalidade == Modalidade.CINEMA
+    val statusDataFinal = statusData ?: StatusData.NAO_INFORMADO
+    return Midia(
+        id = id,
+        tipo = tipo,
+        titulo = titulo.trim(),
+        ano = ano.toIntOrNull(),
+        posterUrl = posterUrl,
+        generos = if (semGenero) emptyList() else generos.toList(),
+        contexto = contexto ?: Contexto.NAO_DEFINIDO,
+        modalidade = modalidade ?: Modalidade.NAO_SEI,
+        streamings = if (streaming) streamings.toList() else emptyList(),
+        streamingPrincipal = if (streaming) streamingPrincipal else null,
+        cinemaRede = if (cinema) cinemaRede else null,
+        statusLancEpisodico = if (tipo.episodica) statusLancEpisodico else null,
+        cancelada = if (!tipo.episodica) cancelada else false,
+        statusData = statusDataFinal,
+        dataPrincipal = if (statusDataFinal == StatusData.DEFINIDA) parseData(dataTexto) else null,
+        statusUsuario = statusUsuario ?: StatusUsuario.QUERO_ASSISTIR,
+        favorito = favorito,
+        arquivada = arquivada,
+        intencao = true,
     )
 }
 
@@ -263,4 +311,8 @@ fun Midia.toDraft(): FormDraft = FormDraft(
     episodiosDispTempAtual = episodiosDispTempAtual.takeIf { it > 0 }?.toString() ?: "",
     ultimoEpisodioVisto = ultimoEpisodioVisto.toString(),
     statusUsuario = statusUsuario,
+    favorito = favorito,
+    arquivada = arquivada,
+    cadenciaDias = cadenciaDias,
+    dataBaseContagem = dataBaseContagem,
 )

@@ -36,6 +36,7 @@ import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -60,6 +61,7 @@ import br.com.watchup.core.data.domain.permiteVisto
 import br.com.watchup.core.data.domain.progressoVisivel
 import br.com.watchup.core.data.model.Contexto
 import br.com.watchup.core.data.model.GENEROS_DISPONIVEIS
+import br.com.watchup.core.data.model.Midia
 import br.com.watchup.core.data.model.Modalidade
 import br.com.watchup.core.data.model.REDES_CINEMA
 import br.com.watchup.core.data.model.STREAMINGS_DISPONIVEIS
@@ -70,6 +72,7 @@ import br.com.watchup.core.data.model.TipoMidia
 import br.com.watchup.core.data.repo.MidiaRepository
 import br.com.watchup.core.ui.component.PushScreenScaffold
 import br.com.watchup.core.ui.component.formatarData
+import java.time.LocalDate
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -98,6 +101,7 @@ fun RegistrationScreen(
     val edicao = midiaId != null
 
     var draft by remember { mutableStateOf(FormDraft()) }
+    var midiaOriginal by remember { mutableStateOf<Midia?>(null) } // item 4: base p/ reancorar
     var passoIndex by remember { mutableIntStateOf(0) }
     var erro by remember { mutableStateOf<String?>(null) }
     var iniciado by remember { mutableStateOf(false) }
@@ -109,7 +113,7 @@ fun RegistrationScreen(
     LaunchedEffect(midiaId) {
         if (iniciado) return@LaunchedEffect
         if (midiaId != null) {
-            repo.observarPorId(midiaId).first()?.let { draft = it.toDraft() }
+            repo.observarPorId(midiaId).first()?.let { midiaOriginal = it; draft = it.toDraft() }
             passoIndex = passoInicial.coerceIn(0, PassoCadastro.entries.lastIndex)
         } else if (!prefTitulo.isNullOrBlank()) {
             // Cadastro iniciado a partir de um resultado da busca: já traz título,
@@ -153,7 +157,19 @@ fun RegistrationScreen(
             salvando = true
             erroSalvar = false
             try {
-                val salvo = repo.salvar(draft.toMidia(id = midiaId ?: 0))
+                val nova = draft.toMidia(id = midiaId ?: 0)
+                // Item 4: se a quantidade de episódios mudou na edição de uma série
+                // lançando, reancora a contagem de novos episódios na data da edição.
+                val ajustada = midiaOriginal?.let { orig ->
+                    if (nova.statusLancEpisodico == StatusLancEpisodico.LANCANDO &&
+                        nova.episodiosDispTempAtual != orig.episodiosDispTempAtual
+                    ) {
+                        nova.copy(dataBaseContagem = LocalDate.now())
+                    } else {
+                        nova
+                    }
+                } ?: nova
+                val salvo = repo.salvar(ajustada)
                 salvando = false
                 Toast.makeText(
                     context,
@@ -167,6 +183,29 @@ fun RegistrationScreen(
             }
         }
     }
+
+    // Item 8: salva o rascunho como "intenção de assistir" (parcial), pulando o resto.
+    fun salvarComoIntencao() {
+        scope.launch {
+            salvando = true
+            erroSalvar = false
+            try {
+                val salvo = repo.salvar(draft.toMidiaIntencao(id = midiaId ?: 0))
+                salvando = false
+                Toast.makeText(context, "Salvo como intenção de assistir", Toast.LENGTH_SHORT).show()
+                onSalvo(salvo)
+            } catch (e: Exception) {
+                salvando = false
+                erroSalvar = true
+            }
+        }
+    }
+
+    // Botão de intenção: no cadastro novo (ou ao editar uma intenção existente),
+    // disponível assim que há tipo + título, em qualquer etapa antes da confirmação.
+    val podeIntencao = (!edicao || midiaOriginal?.intencao == true) &&
+        passo != PassoCadastro.CONFIRMAR &&
+        draft.tipo != null && draft.titulo.isNotBlank()
 
     PushScreenScaffold(title = if (edicao) "Editar mídia" else "Adicionar mídia", onBack = ::voltar) { innerPadding ->
         Column(
@@ -227,6 +266,18 @@ fun RegistrationScreen(
                 } else {
                     Button(onClick = ::avancar, modifier = Modifier.weight(1f)) { Text("Avançar") }
                 }
+            }
+
+            // Item 8: atalho para salvar como intenção sem completar o wizard.
+            if (podeIntencao) {
+                TextButton(
+                    onClick = ::salvarComoIntencao,
+                    enabled = !salvando,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .padding(bottom = 12.dp),
+                ) { Text("Salvar como intenção de assistir") }
             }
         }
     }

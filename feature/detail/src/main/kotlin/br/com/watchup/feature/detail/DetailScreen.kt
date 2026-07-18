@@ -19,12 +19,20 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -46,9 +54,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import br.com.watchup.core.data.domain.Cadencia
+import br.com.watchup.core.data.domain.cadenciaDe
 import br.com.watchup.core.data.domain.deriveStatusMidia
-import br.com.watchup.core.data.domain.disponibilidadeVisivel
 import br.com.watchup.core.data.domain.episodiosFaltantes
+import br.com.watchup.core.data.domain.novosEpisodiosEstimados
 import br.com.watchup.core.data.domain.estaEmDia
 import br.com.watchup.core.data.domain.fracaoProgresso
 import br.com.watchup.core.data.domain.permiteVisto
@@ -65,6 +75,7 @@ import br.com.watchup.core.ui.component.PushScreenScaffold
 import br.com.watchup.core.ui.component.StatusMidiaChip
 import br.com.watchup.core.ui.component.StatusUsuarioChip
 import br.com.watchup.core.ui.component.formatarData
+import java.time.LocalDate
 import kotlinx.coroutines.launch
 
 // Índices das etapas do cadastro (espelham PassoCadastro no módulo :feature:registration).
@@ -93,6 +104,7 @@ fun DetailScreen(
     val episodios by repo.observarEpisodios(midiaId).collectAsStateWithLifecycle(emptyList())
 
     var confirmarExclusao by remember { mutableStateOf(false) }
+    var menuAberto by remember { mutableStateOf(false) }
 
     val m = midia
 
@@ -122,11 +134,43 @@ fun DetailScreen(
         onBack = onBack,
         actions = {
             if (m != null) {
+                IconButton(onClick = { scope.launch { repo.salvar(m.copy(favorito = !m.favorito)) } }) {
+                    if (m.favorito) {
+                        Icon(Icons.Filled.Star, contentDescription = "Remover dos favoritos", tint = MaterialTheme.colorScheme.tertiary)
+                    } else {
+                        Icon(Icons.Filled.StarBorder, contentDescription = "Marcar como favorito")
+                    }
+                }
                 IconButton(onClick = { onEditar(m.id, 0) }) {
                     Icon(Icons.Filled.Edit, contentDescription = "Editar")
                 }
                 IconButton(onClick = { confirmarExclusao = true }) {
                     Icon(Icons.Filled.Delete, contentDescription = "Remover")
+                }
+                IconButton(onClick = { menuAberto = true }) {
+                    Icon(Icons.Filled.MoreVert, contentDescription = "Mais ações")
+                }
+                DropdownMenu(expanded = menuAberto, onDismissRequest = { menuAberto = false }) {
+                    DropdownMenuItem(
+                        text = { Text(if (m.arquivada) "Desarquivar" else "Arquivar") },
+                        leadingIcon = {
+                            Icon(
+                                if (m.arquivada) Icons.Filled.Unarchive else Icons.Filled.Archive,
+                                contentDescription = null,
+                            )
+                        },
+                        onClick = {
+                            menuAberto = false
+                            scope.launch {
+                                repo.salvar(m.copy(arquivada = !m.arquivada))
+                                Toast.makeText(
+                                    context,
+                                    if (m.arquivada) "Desarquivada" else "Arquivada",
+                                    Toast.LENGTH_SHORT,
+                                ).show()
+                            }
+                        },
+                    )
                 }
             }
         },
@@ -151,18 +195,52 @@ fun DetailScreen(
             Spacer(Modifier.height(16.dp))
 
             when {
-                m.tipo.episodica && m.statusLancEpisodico == StatusLancEpisodico.VAI_LANCAR ->
-                    AvisoCard(avisoVaiLancar(m))
-
+                // Progresso tem prioridade: episódica assistida com temporadas
+                // disponíveis mostra o card mesmo se uma nova temporada vem a caminho.
                 temCardProgresso(m) ->
                     CardProgresso(m, onAtualizar = { onAtualizarProgresso(m.id) })
+
+                m.tipo.episodica && m.statusLancEpisodico == StatusLancEpisodico.VAI_LANCAR ->
+                    AvisoCard(avisoVaiLancar(m))
+            }
+
+            // Item 4: novos episódios (cadência + sugestão de atualização).
+            val mostraNovos = m.tipo.episodica &&
+                (m.statusLancEpisodico == StatusLancEpisodico.LANCANDO ||
+                    m.statusLancEpisodico == StatusLancEpisodico.VAI_LANCAR)
+            if (mostraNovos) {
+                Spacer(Modifier.height(16.dp))
+                val novos = novosEpisodiosEstimados(m)
+                NovosEpisodiosCard(
+                    m = m,
+                    novos = novos,
+                    onCadencia = { cad -> scope.launch { repo.salvar(m.copy(cadenciaDias = cad.dias)) } },
+                    onAtualizar = {
+                        scope.launch {
+                            val total = m.episodiosDispTempAtual + novos
+                            repo.salvar(
+                                m.copy(
+                                    episodiosDispTempAtual = total,
+                                    dataBaseContagem = LocalDate.now(),
+                                    statusLancEpisodico = StatusLancEpisodico.LANCANDO,
+                                ),
+                            )
+                            repo.salvarEpisodios(
+                                EpisodiosTemporada(m.id, m.temporadaAtual.coerceAtLeast(1), total),
+                            )
+                            Toast.makeText(context, "Cadastro atualizado: +$novos ep.", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                )
             }
 
             Spacer(Modifier.height(16.dp))
             Ficha(m, onEditar = { etapa -> onEditar(m.id, etapa) })
 
-            // Episódios por temporada — editável (oculto para "vai lançar").
-            if (disponibilidadeVisivel(m.tipo, m.statusLancEpisodico) && m.temporadasDisponiveis > 0) {
+            // Episódios por temporada — editável sempre que houver temporada(s)
+            // disponível(is), inclusive "temporada nova" a caminho (necessário para
+            // registrar/atualizar o progresso das temporadas já lançadas).
+            if (m.tipo.episodica && m.temporadasDisponiveis > 0) {
                 Spacer(Modifier.height(16.dp))
                 Text("Episódios por temporada", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(8.dp))
@@ -259,20 +337,32 @@ private fun AvisoCard(texto: String) {
 
 @Composable
 private fun CardProgresso(m: Midia, onAtualizar: () -> Unit) {
+    // Progresso ainda não definido (ex.: série "temporada nova" recém-marcada como
+    // Assistindo, sem temporada/episódios preenchidos): convida a começar.
+    val semProgresso = m.temporadaAtual <= 0 || m.episodiosDispTempAtual <= 0
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
-            Text("Temporada ${m.temporadaAtual}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            val temp = m.temporadaAtual.takeIf { it > 0 } ?: 1
+            Text("Temporada $temp", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(12.dp))
-            LabeledProgressBar(
-                fracao = fracaoProgresso(m),
-                label = "${m.ultimoEpisodioVisto} de ${m.episodiosDispTempAtual} episódios",
-            )
-            Spacer(Modifier.height(12.dp))
-            Text(
-                if (estaEmDia(m)) "Você está em dia!" else "Faltam ${episodiosFaltantes(m)} episódio(s)",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
+            if (semProgresso) {
+                Text(
+                    "Você tem ${m.temporadasDisponiveis} temporada(s) disponível(is). " +
+                        "Toque em Atualizar progresso para marcar onde parou.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            } else {
+                LabeledProgressBar(
+                    fracao = fracaoProgresso(m),
+                    label = "${m.ultimoEpisodioVisto} de ${m.episodiosDispTempAtual} episódios",
+                )
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    if (estaEmDia(m)) "Você está em dia!" else "Faltam ${episodiosFaltantes(m)} episódio(s)",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
             if (!m.diaLancamento.isNullOrBlank() || !m.horarioLancamento.isNullOrBlank()) {
                 Spacer(Modifier.height(4.dp))
                 val quando = listOfNotNull(m.diaLancamento, m.horarioLancamento).joinToString(" · ")
@@ -284,6 +374,50 @@ private fun CardProgresso(m: Midia, onAtualizar: () -> Unit) {
             }
             Spacer(Modifier.height(12.dp))
             androidx.compose.material3.Button(onClick = onAtualizar) { Text("Atualizar progresso") }
+        }
+    }
+}
+
+/** Item 4 — cadência configurável + sugestão de novos episódios com ação de atualizar. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun NovosEpisodiosCard(
+    m: Midia,
+    novos: Int,
+    onCadencia: (Cadencia) -> Unit,
+    onAtualizar: () -> Unit,
+) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Text("Novos episódios", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(8.dp))
+            Text("Cadência", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(4.dp))
+            val atual = cadenciaDe(m)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Cadencia.entries.forEach { c ->
+                    FilterChip(
+                        selected = atual == c,
+                        onClick = { onCadencia(c) },
+                        label = { Text(c.rotulo) },
+                    )
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            if (novos > 0) {
+                Text(
+                    "Estimamos $novos novo(s) episódio(s) desde a última atualização.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Spacer(Modifier.height(8.dp))
+                Button(onClick = onAtualizar) { Text("Atualizar cadastro (+$novos)") }
+            } else {
+                Text(
+                    "Sem novos episódios estimados por ora.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }

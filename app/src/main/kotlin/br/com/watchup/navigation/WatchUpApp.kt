@@ -25,6 +25,7 @@ import androidx.navigation.navArgument
 import br.com.watchup.feature.detail.DetailScreen
 import br.com.watchup.feature.detail.ProgressScreen
 import br.com.watchup.feature.home.HomeScreen
+import br.com.watchup.feature.library.ArchiveScreen
 import br.com.watchup.feature.library.LibraryScreen
 import br.com.watchup.feature.registration.RegistrationScreen
 import br.com.watchup.feature.search.SearchScreen
@@ -98,7 +99,16 @@ fun WatchUpApp() {
                 )
             }
             composable(Routes.SETTINGS) {
-                SettingsScreen(onBack = { navController.popBackStack() })
+                SettingsScreen(
+                    onBack = { navController.popBackStack() },
+                    onAbrirArquivadas = { navController.navigate(Routes.ARCHIVE) },
+                )
+            }
+            composable(Routes.ARCHIVE) {
+                ArchiveScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenDetail = { id -> navController.navigate(Routes.detail(id)) },
+                )
             }
 
             composable(

@@ -14,8 +14,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -57,7 +60,7 @@ private val FORMATO_DATA = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("pt", "BR
  * status. Sem OAuth, sem Drive API, sem rede direta do app.
  */
 @Composable
-fun SettingsScreen(onBack: () -> Unit) {
+fun SettingsScreen(onBack: () -> Unit, onAbrirArquivadas: () -> Unit = {}) {
     val context = LocalContext.current
     val repo = remember { MidiaRepository.get(context) }
     val scope = rememberCoroutineScope()
@@ -254,6 +257,27 @@ fun SettingsScreen(onBack: () -> Unit) {
                 enabled = temPasta,
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Apagar backup") }
+
+            Spacer(Modifier.height(24.dp))
+            Text("Biblioteca", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(8.dp))
+            // Acesso discreto ao arquivo (item 9).
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onAbrirArquivadas)
+                    .padding(vertical = 12.dp),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Filled.Inventory2, contentDescription = null)
+                Spacer(Modifier.width(12.dp))
+                Text("Arquivadas", Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+                Icon(
+                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
