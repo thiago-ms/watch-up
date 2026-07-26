@@ -12,6 +12,7 @@ import br.com.watchup.core.data.domain.BackupSerializer
 import br.com.watchup.core.data.model.EpisodiosTemporada
 import br.com.watchup.core.data.model.Midia
 import kotlinx.coroutines.flow.Flow
+import java.time.LocalDate
 
 /**
  * Contrato de dados do app. Mantido como interface (§3.2, "Camadas") para permitir
@@ -31,6 +32,21 @@ interface MidiaRepository {
     suspend fun salvar(midia: Midia): Long
     suspend fun remover(midia: Midia)
     suspend fun salvarEpisodios(episodios: EpisodiosTemporada)
+
+    /**
+     * Item 4 — atualiza a quantidade de episódios de uma temporada e, quando é a
+     * **temporada atual**, sincroniza a mídia: reflete a quantidade em
+     * `episodiosDispTempAtual` e **reancora `dataBaseContagem`** (a contagem de novos
+     * episódios reinicia a partir de [hoje]). Editar temporadas passadas não mexe na
+     * âncora. Centraliza os pontos que alteram a contagem (steppers −/+ do Detalhe e
+     * da tela de progresso).
+     */
+    suspend fun atualizarEpisodios(
+        midia: Midia,
+        temporada: Int,
+        quantidade: Int,
+        hoje: LocalDate = LocalDate.now(),
+    )
 
     /** Backup: serializa toda a biblioteca (mídias + episódios) em JSON. */
     suspend fun exportarJson(): String
@@ -87,6 +103,24 @@ class RoomMidiaRepository(
 
     override suspend fun salvarEpisodios(episodios: EpisodiosTemporada) =
         dao.salvarEpisodios(episodios)
+
+    override suspend fun atualizarEpisodios(
+        midia: Midia,
+        temporada: Int,
+        quantidade: Int,
+        hoje: LocalDate,
+    ) {
+        dao.salvarEpisodios(EpisodiosTemporada(midia.id, temporada, quantidade))
+        // Só a temporada atual alimenta a contagem de novos episódios (item 4).
+        if (temporada == midia.temporadaAtual.coerceAtLeast(1)) {
+            dao.atualizar(
+                midia.copy(
+                    episodiosDispTempAtual = quantidade,
+                    dataBaseContagem = hoje,
+                ),
+            )
+        }
+    }
 
     override suspend fun exportarJson(): String =
         BackupSerializer.toJson(dao.listarTodas(), dao.listarTodosEpisodios())

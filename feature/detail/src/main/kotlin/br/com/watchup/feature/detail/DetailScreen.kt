@@ -130,7 +130,8 @@ fun DetailScreen(
     }
 
     PushScreenScaffold(
-        title = m?.titulo ?: "Detalhe",
+        // Sem título na barra: o título já aparece ao lado do pôster (Cabecalho).
+        title = "",
         onBack = onBack,
         actions = {
             if (m != null) {
@@ -253,7 +254,7 @@ fun DetailScreen(
                         quantidade = atual,
                         onAlterar = { nova ->
                             scope.launch {
-                                repo.salvarEpisodios(EpisodiosTemporada(m.id, temporada, nova))
+                                repo.atualizarEpisodios(m, temporada, nova)
                             }
                         },
                     )

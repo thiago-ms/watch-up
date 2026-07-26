@@ -7,6 +7,7 @@ import br.com.watchup.core.data.model.StatusLancEpisodico
 import br.com.watchup.core.data.model.StatusMidia
 import br.com.watchup.core.data.model.StatusUsuario
 import br.com.watchup.core.data.model.TipoMidia
+import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
@@ -21,7 +22,12 @@ fun deriveStatusMidia(m: Midia, hoje: LocalDate = LocalDate.now()): StatusMidia 
         StatusLancEpisodico.COMPLETA -> StatusMidia.FINALIZADA
         StatusLancEpisodico.CANCELADA -> StatusMidia.CANCELADA
         StatusLancEpisodico.LANCANDO -> StatusMidia.LANCANDO
-        StatusLancEpisodico.VAI_LANCAR -> StatusMidia.EM_BREVE
+        // "Vai lançar" cuja estreia já passou já está no ar → deixa de ser "Em breve"
+        // (senão cai na seção "Em cartaz" da Home com a tag "Em breve", inconsistente).
+        StatusLancEpisodico.VAI_LANCAR ->
+            if (m.statusData == StatusData.DEFINIDA &&
+                m.dataPrincipal != null && !m.dataPrincipal.isAfter(hoje)
+            ) StatusMidia.LANCANDO else StatusMidia.EM_BREVE
         null -> StatusMidia.EM_CARTAZ
     }
 
@@ -113,13 +119,47 @@ enum class Cadencia(val dias: Int, val rotulo: String) {
 fun cadenciaDe(m: Midia): Cadencia =
     Cadencia.entries.minByOrNull { kotlin.math.abs(it.dias - m.cadenciaDias) } ?: Cadencia.SEMANAL
 
+/** Mapeia o rótulo PT de [Midia.diaLancamento] para [DayOfWeek] (null se não reconhecido). */
+fun diaDaSemanaDe(rotulo: String?): DayOfWeek? = when (rotulo?.trim()?.lowercase()) {
+    "domingo" -> DayOfWeek.SUNDAY
+    "segunda", "segunda-feira" -> DayOfWeek.MONDAY
+    "terça", "terca", "terça-feira", "terca-feira" -> DayOfWeek.TUESDAY
+    "quarta", "quarta-feira" -> DayOfWeek.WEDNESDAY
+    "quinta", "quinta-feira" -> DayOfWeek.THURSDAY
+    "sexta", "sexta-feira" -> DayOfWeek.FRIDAY
+    "sábado", "sabado" -> DayOfWeek.SATURDAY
+    else -> null
+}
+
+/**
+ * Nº de ocorrências do dia-da-semana [alvo] entre [de] e [ate]. [ate] é sempre
+ * inclusivo (o episódio "sai" no próprio dia de lançamento). Com [incluiDe] = false
+ * o limite inferior é exclusivo — `(de, ate]`; com true é inclusivo — `[de, ate]`.
+ * Devolve 0 quando não há nenhuma ocorrência no intervalo.
+ */
+fun ocorrenciasDiaSemana(de: LocalDate, ate: LocalDate, alvo: DayOfWeek, incluiDe: Boolean): Int {
+    val limiteExcl = if (incluiDe) de.minusDays(1) else de
+    val delta = ((alvo.value - limiteExcl.dayOfWeek.value + 7) % 7).let { if (it == 0) 7 else it }
+    val primeira = limiteExcl.plusDays(delta.toLong())
+    if (primeira.isAfter(ate)) return 0
+    return (ChronoUnit.DAYS.between(primeira, ate) / 7).toInt() + 1
+}
+
 /**
  * Item 4 — nº de **novos episódios estimados** desde a última atualização de
- * quantidade. Usa a cadência (dias entre episódios) e a data-base da contagem;
- * quando a data-base é nula (ainda "vai lançar"), cai na data de lançamento e conta
- * a partir do episódio 1. Vale só p/ episódica lançando (ou "vai lançar" cuja
- * estreia já passou). Devolve 0 quando não há base, a base é futura ou não há
- * novidade — é uma **sugestão sutil**, nunca altera dado sozinho.
+ * quantidade. Vale só p/ episódica lançando (ou "vai lançar" cuja estreia já passou);
+ * devolve 0 quando não há base, a base é futura ou não há novidade — é uma
+ * **sugestão sutil**, nunca altera dado sozinho.
+ *
+ * Quando a cadência é **semanal e há dia-da-semana definido** ([Midia.diaLancamento]),
+ * conta as **ocorrências reais** desse dia no calendário (o episódio sai no próprio
+ * dia) em vez de dividir dias corridos pela cadência — assim, base numa segunda com
+ * lançamento na terça já acusa 1 novo episódio na quarta. Sem dia-da-semana (ou
+ * cadência não-semanal) cai na estimativa por intervalos de cadência.
+ *
+ * Em ambos os modos: com data-base, ela já contava os episódios de então (limite
+ * inferior exclusivo); sem data-base ("vai lançar" estreado), conta a partir do ep. 1
+ * na estreia (limite inferior inclusivo) e desconta o que já está registrado.
  */
 fun novosEpisodiosEstimados(m: Midia, hoje: LocalDate = LocalDate.now()): Int {
     if (!m.tipo.episodica) return 0
@@ -130,10 +170,20 @@ fun novosEpisodiosEstimados(m: Midia, hoje: LocalDate = LocalDate.now()): Int {
 
     val base = m.dataBaseContagem ?: m.dataPrincipal ?: return 0
     if (base.isAfter(hoje)) return 0
+    val comDataBase = m.dataBaseContagem != null
 
+    // Semanal com dia-da-semana definido → contagem por calendário (respeita o dia real).
+    val diaSemana = diaDaSemanaDe(m.diaLancamento)
+    if (diaSemana != null && cadenciaDe(m) == Cadencia.SEMANAL) {
+        val ocorrencias = ocorrenciasDiaSemana(base, hoje, diaSemana, incluiDe = !comDataBase)
+        return if (comDataBase) ocorrencias
+        else (ocorrencias - m.episodiosDispTempAtual).coerceAtLeast(0)
+    }
+
+    // Fallback: estimativa por intervalos de cadência.
     val cad = m.cadenciaDias.coerceAtLeast(1)
     val intervalos = (ChronoUnit.DAYS.between(base, hoje) / cad).toInt()
-    return if (m.dataBaseContagem != null) {
+    return if (comDataBase) {
         intervalos // a data-base já contava os episódios de então; só os novos contam
     } else {
         (intervalos + 1 - m.episodiosDispTempAtual).coerceAtLeast(0) // conta a partir do ep 1

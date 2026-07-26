@@ -43,7 +43,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import br.com.watchup.core.data.model.EpisodiosTemporada
 import br.com.watchup.core.data.model.StatusUsuario
 import br.com.watchup.core.data.repo.MidiaRepository
 import br.com.watchup.core.ui.component.PushScreenScaffold
@@ -160,7 +159,7 @@ fun ProgressScreen(
                     Spacer(Modifier.width(8.dp))
                     Button(
                         onClick = {
-                            scope.launch { repo.salvarEpisodios(EpisodiosTemporada(m.id, tempSel, qtd)) }
+                            scope.launch { repo.atualizarEpisodios(m, tempSel, qtd) }
                         },
                         enabled = qtd > 0,
                     ) { Text("Definir") }

@@ -33,6 +33,8 @@ linha correspondente com a versão (`versionName`) usada no build.
 | 1.12 | 9 | Archive (arquivar/desarquivar; tela discreta via Configurações) |
 | 1.13 | 4 | Sugestão de novos episódios por cadência (data-base reancorável) |
 | 1.14 | 8 | Cadastro "intenção de assistir" (rascunho parcial + modo na biblioteca) |
+| 1.15 | 4 | Novos episódios cientes do dia-da-semana (contagem por calendário quando semanal) |
+| 1.16 | 3, 4 | Fixes: "vai lançar" com estreia passada não mostra mais tag "Em breve" no bloco "Em cartaz"; stepper −/+ de episódios reancora a data-base da contagem; Detalhe sem título na barra superior |
 
 > Migrações de banco acumuladas até a v1.14: schema Room v4 → v8 (favorito, arquivada,
 > cadência+data-base, intenção) — todas incrementais, preservando a biblioteca.
@@ -88,6 +90,17 @@ data de criação** da mídia e **sugerir a quantidade de novos episódios**.
 - Fórmula da sugestão: `episódios_sugeridos = último_episódio +
   semanas_desde(data-base) × cadência` (data-base = campo próprio, ou data de
   lançamento quando o campo for nulo).
+
+**Refinamento v1.15 — contagem ciente do dia-da-semana:**
+- Quando a **cadência é semanal** e há **dia-da-semana de lançamento** definido, a
+  contagem passa a usar as **ocorrências reais** desse dia no calendário, em vez de
+  dividir dias corridos pela cadência. Ex.: data-base numa **segunda** com lançamento
+  na **terça** já acusa **1 novo episódio na quarta** (antes dava 0).
+- O episódio conta como disponível **no próprio dia** de lançamento.
+- Sem dia-da-semana, ou cadência não-semanal (diária/quinzenal/mensal), mantém-se a
+  estimativa por intervalos de cadência.
+- Vale tanto para o ramo com data-base (limite inferior exclusivo) quanto para o
+  "vai lançar" estreado, que conta do ep. 1 na estreia (limite inferior inclusivo).
 
 ## 5. 🐛 Série com nova temporada não deixa atualizar progresso
 Mídia episódica que **vai lançar nova temporada** e que está sendo assistida (em

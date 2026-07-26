@@ -89,6 +89,21 @@ class MidiaLogicTest {
     }
 
     @Test
+    fun `vai lancar com estreia futura continua EM_BREVE`() {
+        val m = serie(StatusLancEpisodico.VAI_LANCAR)
+            .copy(statusData = StatusData.DEFINIDA, dataPrincipal = hoje.plusDays(10))
+        assertEquals(StatusMidia.EM_BREVE, deriveStatusMidia(m, hoje))
+    }
+
+    @Test
+    fun `vai lancar com estreia no passado deixa de ser EM_BREVE`() {
+        // Bug: caía na seção "Em cartaz" da Home mas exibia a tag "Em breve".
+        val m = serie(StatusLancEpisodico.VAI_LANCAR)
+            .copy(statusData = StatusData.DEFINIDA, dataPrincipal = hoje.minusDays(3))
+        assertEquals(StatusMidia.LANCANDO, deriveStatusMidia(m, hoje))
+    }
+
+    @Test
     fun `serie cancelada vira CANCELADA`() {
         assertEquals(StatusMidia.CANCELADA, deriveStatusMidia(serie(StatusLancEpisodico.CANCELADA), hoje))
     }
@@ -279,5 +294,47 @@ class MidiaLogicTest {
         val m = serie(StatusLancEpisodico.VAI_LANCAR, disp = 0)
             .copy(statusData = StatusData.DEFINIDA, dataPrincipal = hoje.minusWeeks(2), dataBaseContagem = null)
         assertEquals(3, novosEpisodiosEstimados(m, hoje)) // ep 1 na estreia + 2 semanas
+    }
+
+    // Novos episódios com dia-da-semana (item 4, contagem por calendário) -------
+    // hoje = 2025-01-15 é uma quarta-feira.
+    @Test
+    fun `data-base na segunda e lancamento na terca ja acusa 1 na quarta`() {
+        // O caso do bug: base numa segunda, episódio sai na terça → na quarta já há 1.
+        val m = serie(StatusLancEpisodico.LANCANDO, disp = 8, diaLancamento = "Terça")
+            .copy(cadenciaDias = 7, dataBaseContagem = hoje.minusDays(2)) // segunda 2025-01-13
+        assertEquals(1, novosEpisodiosEstimados(m, hoje))
+    }
+
+    @Test
+    fun `episodio conta como disponivel no proprio dia de lancamento`() {
+        // Lançamento na quarta, hoje é quarta → o episódio de hoje já conta.
+        val m = serie(StatusLancEpisodico.LANCANDO, disp = 8, diaLancamento = "Quarta")
+            .copy(cadenciaDias = 7, dataBaseContagem = hoje.minusDays(2)) // segunda
+        assertEquals(1, novosEpisodiosEstimados(m, hoje))
+    }
+
+    @Test
+    fun `vespera do lancamento ainda nao acusa novidade`() {
+        // Lançamento na quinta, hoje é quarta → nenhum episódio novo ainda.
+        val m = serie(StatusLancEpisodico.LANCANDO, disp = 8, diaLancamento = "Quinta")
+            .copy(cadenciaDias = 7, dataBaseContagem = hoje.minusDays(2)) // segunda
+        assertEquals(0, novosEpisodiosEstimados(m, hoje))
+    }
+
+    @Test
+    fun `dia da semana conta as ocorrencias reais ao longo das semanas`() {
+        // Base numa quarta 3 semanas atrás, lançamento na quarta → 3 quartas depois.
+        val m = serie(StatusLancEpisodico.LANCANDO, disp = 8, diaLancamento = "Quarta")
+            .copy(cadenciaDias = 7, dataBaseContagem = hoje.minusWeeks(3)) // quarta 2024-12-25
+        assertEquals(3, novosEpisodiosEstimados(m, hoje))
+    }
+
+    @Test
+    fun `vai lancar com dia da semana conta do ep 1 na estreia`() {
+        // Estreia numa quarta há 2 semanas, lançamento na quarta, nada registrado.
+        val m = serie(StatusLancEpisodico.VAI_LANCAR, disp = 0, diaLancamento = "Quarta")
+            .copy(statusData = StatusData.DEFINIDA, dataPrincipal = hoje.minusWeeks(2), dataBaseContagem = null)
+        assertEquals(3, novosEpisodiosEstimados(m, hoje)) // estreia (quarta) + 2 quartas
     }
 }
