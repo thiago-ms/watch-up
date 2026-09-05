@@ -86,8 +86,10 @@ fun WatchUpApp() {
             }
             composable(Routes.SEARCH) {
                 SearchScreen(
-                    onSelecionar = { titulo, ano, tipoNome, generos, posterUrl ->
-                        navController.navigate(Routes.registrationPrefill(titulo, ano, tipoNome, generos, posterUrl))
+                    onSelecionar = { titulo, ano, tipoNome, generos, posterUrl, tmdbId, tmdbTipo ->
+                        navController.navigate(
+                            Routes.registrationPrefill(titulo, ano, tipoNome, generos, posterUrl, tmdbId, tmdbTipo),
+                        )
                     },
                 )
             }
@@ -138,6 +140,8 @@ fun WatchUpApp() {
                     navArgument(Routes.ARG_TIPO) { type = NavType.StringType; nullable = true; defaultValue = null },
                     navArgument(Routes.ARG_GENEROS) { type = NavType.StringType; nullable = true; defaultValue = null },
                     navArgument(Routes.ARG_POSTER) { type = NavType.StringType; nullable = true; defaultValue = null },
+                    navArgument(Routes.ARG_TMDB_ID) { type = NavType.IntType; defaultValue = 0 },
+                    navArgument(Routes.ARG_TMDB_TIPO) { type = NavType.StringType; nullable = true; defaultValue = null },
                 ),
             ) { entry ->
                 val args = entry.arguments
@@ -150,6 +154,8 @@ fun WatchUpApp() {
                     prefTipo = args?.getString(Routes.ARG_TIPO),
                     prefGeneros = args?.getString(Routes.ARG_GENEROS),
                     prefPosterUrl = args?.getString(Routes.ARG_POSTER),
+                    prefTmdbId = args?.getInt(Routes.ARG_TMDB_ID) ?: 0,
+                    prefTmdbTipo = args?.getString(Routes.ARG_TMDB_TIPO),
                 )
             }
             composable(

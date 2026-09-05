@@ -42,6 +42,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -57,7 +58,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import br.com.watchup.core.data.domain.Cadencia
 import br.com.watchup.core.data.domain.cadenciaDe
 import br.com.watchup.core.data.domain.deriveStatusMidia
+import br.com.watchup.core.data.domain.diaLancamentoDerivado
 import br.com.watchup.core.data.domain.episodiosFaltantes
+import br.com.watchup.core.data.domain.normalizarSerieLancando
 import br.com.watchup.core.data.domain.novosEpisodiosEstimados
 import br.com.watchup.core.data.domain.estaEmDia
 import br.com.watchup.core.data.domain.fracaoProgresso
@@ -78,10 +81,13 @@ import br.com.watchup.core.ui.component.formatarData
 import java.time.LocalDate
 import kotlinx.coroutines.launch
 
-// Índices das etapas do cadastro (espelham PassoCadastro no módulo :feature:registration).
-private const val ETAPA_DETALHES = 2
-private const val ETAPA_ONDE_ASSISTIR = 3
-private const val ETAPA_DATAS_STATUS = 4
+// ATENÇÃO: índices das etapas do cadastro — são o ORDINAL de `PassoCadastro`, que
+// vive em :feature:registration e não é visível aqui (feature não depende de feature),
+// por isso a duplicação em números literais. Mexeu na ORDEM do enum lá? Renumere aqui:
+// nada quebra a compilação, a ficha só passa a abrir a etapa errada em silêncio.
+// Hoje: 0 TIPO · 1 TITULO · 2 GENERO · 3 DATAS_STATUS · 4 SOBRE_VOCE · 5 CONFIRMAR.
+private const val ETAPA_DATAS_STATUS = 3
+private const val ETAPA_SOBRE_VOCE = 4
 
 /**
  * S016 — Detalhe da mídia. Cabeçalho com dois status (mídia/usuário), seletor de
@@ -107,6 +113,15 @@ fun DetailScreen(
     var menuAberto by remember { mutableStateOf(false) }
 
     val m = midia
+
+    // Conserto retroativo: séries promovidas antes da correção ficaram "Lançando"
+    // com temporadasDisponiveis = 0 (sem progresso nem lista de temporadas). Ao
+    // abrir o Detalhe, normaliza o registro — a função devolve null quando não há
+    // o que corrigir, então isto roda no máximo uma vez por mídia.
+    LaunchedEffect(m) {
+        val corrigida = m?.let { normalizarSerieLancando(it) }
+        if (corrigida != null) repo.salvar(corrigida)
+    }
 
     if (confirmarExclusao && m != null) {
         AlertDialog(
@@ -218,17 +233,35 @@ fun DetailScreen(
                     onCadencia = { cad -> scope.launch { repo.salvar(m.copy(cadenciaDias = cad.dias)) } },
                     onAtualizar = {
                         scope.launch {
-                            val total = m.episodiosDispTempAtual + novos
+                            // Promoção "vai lançar" → "lançando": a série estreou de fato, então
+                            // ganha disponibilidade (sem isso ficava com temporadasDisponiveis = 0
+                            // e o Detalhe escondia progresso e a lista de temporadas). Série nova
+                            // abre a temporada 1; temporada nova abre a N+1 — e, nos dois casos, a
+                            // contagem de episódios **recomeça do zero** (só os estimados), sem
+                            // arrastar os episódios da temporada anterior.
+                            val promovendo = m.statusLancEpisodico == StatusLancEpisodico.VAI_LANCAR
+                            val temporada = if (promovendo) {
+                                (m.temporadasDisponiveis + 1).coerceAtLeast(1)
+                            } else {
+                                m.temporadaAtual.coerceAtLeast(1)
+                            }
+                            val total = if (promovendo) novos else m.episodiosDispTempAtual + novos
                             repo.salvar(
                                 m.copy(
+                                    temporadasDisponiveis = maxOf(m.temporadasDisponiveis, temporada),
+                                    temporadaAtual = temporada,
                                     episodiosDispTempAtual = total,
+                                    // Trocou de temporada → o progresso recomeça nela; as
+                                    // anteriores contam como concluídas (ver ProgressScreen).
+                                    ultimoEpisodioVisto =
+                                        if (temporada != m.temporadaAtual) 0 else m.ultimoEpisodioVisto,
                                     dataBaseContagem = LocalDate.now(),
+                                    // Herda o dia da semana da estreia (não sobrescreve o já definido).
+                                    diaLancamento = diaLancamentoDerivado(m),
                                     statusLancEpisodico = StatusLancEpisodico.LANCANDO,
                                 ),
                             )
-                            repo.salvarEpisodios(
-                                EpisodiosTemporada(m.id, m.temporadaAtual.coerceAtLeast(1), total),
-                            )
+                            repo.salvarEpisodios(EpisodiosTemporada(m.id, temporada, total))
                             Toast.makeText(context, "Cadastro atualizado: +$novos ep.", Toast.LENGTH_SHORT).show()
                         }
                     },
@@ -436,8 +469,9 @@ private fun Ficha(m: Midia, onEditar: (Int) -> Unit) {
             // Lançamento: episódica usa o status escolhido; não-episódica (filme) usa o derivado.
             val lancamento = m.statusLancEpisodico?.rotulo ?: deriveStatusMidia(m).rotulo
             FichaLinha("Lançamento", lancamento) { onEditar(ETAPA_DATAS_STATUS) }
-            FichaLinha("Onde assistir", ondeAssistir(m)) { onEditar(ETAPA_ONDE_ASSISTIR) }
-            FichaLinha("Contexto", m.contexto.rotulo) { onEditar(ETAPA_DETALHES) }
+            // Item 15: "Onde assistir" e "Contexto" agora moram juntos na etapa "Sobre você".
+            FichaLinha("Onde assistir", ondeAssistir(m)) { onEditar(ETAPA_SOBRE_VOCE) }
+            FichaLinha("Contexto", m.contexto.rotulo) { onEditar(ETAPA_SOBRE_VOCE) }
             FichaLinha("Status da data", m.statusData.rotulo) { onEditar(ETAPA_DATAS_STATUS) }
             if (m.dataPrincipal != null) FichaLinha("Data", formatarData(m.dataPrincipal)) { onEditar(ETAPA_DATAS_STATUS) }
         }

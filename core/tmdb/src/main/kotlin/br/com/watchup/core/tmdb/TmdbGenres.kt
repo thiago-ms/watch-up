@@ -1,4 +1,4 @@
-package br.com.watchup.feature.search
+package br.com.watchup.core.tmdb
 
 /**
  * Dicionário de gêneros do TMDB (movie + tv unificados) em pt-BR. Os nomes batem

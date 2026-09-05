@@ -10,6 +10,7 @@ import br.com.watchup.core.data.model.StatusData
 import br.com.watchup.core.data.model.StatusLancEpisodico
 import br.com.watchup.core.data.model.StatusUsuario
 import br.com.watchup.core.data.model.TipoMidia
+import br.com.watchup.core.tmdb.TmdbDetalhes
 import java.time.LocalDate
 
 /** Rascunho do cadastro (S010–S015). Números, datas e horário ficam como texto e
@@ -70,13 +71,20 @@ val DIAS_SEMANA: List<String> = listOf(
     "Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado",
 )
 
-/** Etapas do cadastro em 6 passos (§6, S010–S015). */
+/**
+ * Etapas do cadastro (§6, S010–S015): 5 de preenchimento + a confirmação.
+ * A **ordem de declaração é a ordem do wizard** (percorrido por `entries`), e o
+ * ordinal de cada etapa é o índice usado em `passoInicial` — o Detalhe abre a
+ * edição direto numa etapa por esse número (ver `ETAPA_*` em `DetailScreen.kt`).
+ * Item 15: o que é pessoal (contexto de consumo + onde vai assistir) ficou junto
+ * na etapa final [SOBRE_VOCE]; [GENERO] guarda só o que é da obra.
+ */
 enum class PassoCadastro(val titulo: String) {
     TIPO("Tipo"),
     TITULO("Título"),
-    DETALHES("Detalhes"),
-    ONDE_ASSISTIR("Onde assistir"),
+    GENERO("Gênero"),
     DATAS_STATUS("Datas e status"),
+    SOBRE_VOCE("Sobre você"),
     CONFIRMAR("Confirmar"),
 }
 
@@ -125,21 +133,19 @@ fun validarPasso(passo: PassoCadastro, d: FormDraft): String? = when (passo) {
     PassoCadastro.TITULO ->
         if (d.titulo.isBlank()) "Informe um título." else null
 
-    PassoCadastro.DETALHES -> when {
-        !d.semGenero && d.generos.isEmpty() -> "Selecione ao menos um gênero."
-        d.contexto == null -> "Escolha o contexto de consumo."
-        else -> null
-    }
+    PassoCadastro.GENERO ->
+        if (!d.semGenero && d.generos.isEmpty()) "Selecione ao menos um gênero." else null
 
-    PassoCadastro.ONDE_ASSISTIR -> when {
+    PassoCadastro.DATAS_STATUS -> validarDatasStatus(d)
+
+    PassoCadastro.SOBRE_VOCE -> when {
+        d.contexto == null -> "Escolha o contexto de consumo."
         d.modalidade == null -> "Selecione onde vai assistir."
         d.modalidade == Modalidade.STREAMING && d.streamings.isEmpty() -> "Selecione ao menos um streaming."
         d.modalidade == Modalidade.STREAMING && d.streamingPrincipal == null -> "Defina o streaming principal (★)."
         d.modalidade == Modalidade.CINEMA && d.cinemaRede.isNullOrBlank() -> "Informe o cinema/rede."
         else -> null
     }
-
-    PassoCadastro.DATAS_STATUS -> validarDatasStatus(d)
 
     PassoCadastro.CONFIRMAR -> null
 }
@@ -275,6 +281,62 @@ fun FormDraft.toMidiaIntencao(id: Long = 0): Midia {
         arquivada = arquivada,
         intencao = true,
     )
+}
+
+/**
+ * Item 17 — completa o rascunho com os detalhes vindos do TMDB.
+ *
+ * A regra é **só preencher o que está vazio**: nada do que o prefill da busca (tipo,
+ * título, ano, gêneros, pôster) ou o usuário já decidiu é desfeito — a chamada é
+ * assíncrona e pode chegar depois de o usuário ter começado a digitar.
+ *
+ * Ficam de fora de propósito: `temporadaAtual` e `ultimoEpisodioVisto` (são progresso
+ * pessoal, não disponibilidade da obra), `horarioLancamento` (o TMDB não expõe) e
+ * `modalidade` (onde *você* vai assistir é escolha sua — só deixamos os chips de
+ * streaming já marcados para quando você escolher "Streaming").
+ */
+fun FormDraft.completarComTmdb(det: TmdbDetalhes): FormDraft {
+    var novo = copy(
+        ano = ano.ifBlank { det.ano.orEmpty() },
+        generos = if (generos.isEmpty() && !semGenero) {
+            det.generos.filter { it.isNotBlank() }.toSet()
+        } else {
+            generos
+        },
+        dataTexto = dataTexto.ifBlank { det.dataDigitos.orEmpty() },
+        diaLancamento = diaLancamento.ifBlank { det.diaLancamento.orEmpty() },
+        temporadasDisponiveis = temporadasDisponiveis.ifBlank {
+            det.temporadasDisponiveis?.toString().orEmpty()
+        },
+        episodiosDispTempAtual = episodiosDispTempAtual.ifBlank {
+            det.episodiosTempMaisRecente?.toString().orEmpty()
+        },
+    )
+
+    // Status da obra: a busca não tem como saber, o detalhe sabe.
+    novo = if (novo.episodica) {
+        novo.copy(statusLancEpisodico = novo.statusLancEpisodico ?: det.statusLancEpisodico)
+    } else {
+        novo.copy(cancelada = novo.cancelada || det.cancelada)
+    }
+
+    // Streamings: o "principal" (★) é obrigatório quando a modalidade é Streaming,
+    // então ou preenche os dois, ou nenhum. O 1º do `flatrate` vira o principal.
+    if (novo.streamings.isEmpty() && det.streamings.isNotEmpty()) {
+        novo = novo.copy(
+            streamings = det.streamings.toSet(),
+            streamingPrincipal = novo.streamingPrincipal ?: det.streamings.first(),
+        )
+    }
+
+    // Status da data só quando o campo é visível (§5.1); com data em mãos é "definida",
+    // sem data é "sem data".
+    if (statusDataVisivel(novo) && novo.statusData == null) {
+        novo = novo.copy(
+            statusData = if (parseData(novo.dataTexto) != null) StatusData.DEFINIDA else StatusData.SEM_DATA,
+        )
+    }
+    return novo
 }
 
 /** Preenche o rascunho a partir de uma [Midia] existente (edição, S018). */

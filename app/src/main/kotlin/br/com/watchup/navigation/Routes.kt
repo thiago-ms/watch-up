@@ -24,7 +24,8 @@ object Routes {
     /** Cadastro novo. A rota aceita prefill opcional vindo da busca (query args). */
     const val REGISTRATION_NEW = "registration/new"
     const val REGISTRATION_NEW_ROUTE =
-        "registration/new?titulo={titulo}&ano={ano}&tipo={tipo}&generos={generos}&poster={poster}"
+        "registration/new?titulo={titulo}&ano={ano}&tipo={tipo}&generos={generos}&poster={poster}" +
+            "&tmdbId={tmdbId}&tmdbTipo={tmdbTipo}"
     const val REGISTRATION_EDIT = "registration/edit/{midiaId}?step={step}"
 
     const val ARG_MIDIA_ID = "midiaId"
@@ -34,6 +35,8 @@ object Routes {
     const val ARG_TIPO = "tipo"
     const val ARG_GENEROS = "generos"
     const val ARG_POSTER = "poster"
+    const val ARG_TMDB_ID = "tmdbId"
+    const val ARG_TMDB_TIPO = "tmdbTipo"
 
     fun detail(midiaId: Long) = "detail/$midiaId"
     fun progress(midiaId: Long) = "progress/$midiaId"
@@ -41,18 +44,25 @@ object Routes {
     /** Edição da mídia abrindo direto numa etapa (0 = início). */
     fun registrationEdit(midiaId: Long, step: Int = 0) = "registration/edit/$midiaId?step=$step"
 
-    /** Cadastro novo pré-preenchido a partir de um resultado da busca. */
+    /**
+     * Cadastro novo pré-preenchido a partir de um resultado da busca. `tmdbId`/
+     * `tmdbTipo` identificam a obra no TMDB — é com eles que o cadastro busca os
+     * detalhes para se autopreencher (item 17).
+     */
     fun registrationPrefill(
         titulo: String,
         ano: String?,
         tipoNome: String,
         generos: List<String>,
         posterUrl: String?,
+        tmdbId: Int,
+        tmdbTipo: String,
     ): String {
         fun enc(s: String?) = Uri.encode(s.orEmpty())
         // Gêneros: nomes juntos por "|" (não aparece em nome de gênero).
         return "registration/new?titulo=${enc(titulo)}&ano=${enc(ano)}" +
-            "&tipo=${enc(tipoNome)}&generos=${enc(generos.joinToString("|"))}&poster=${enc(posterUrl)}"
+            "&tipo=${enc(tipoNome)}&generos=${enc(generos.joinToString("|"))}&poster=${enc(posterUrl)}" +
+            "&tmdbId=$tmdbId&tmdbTipo=${enc(tmdbTipo)}"
     }
 }
 

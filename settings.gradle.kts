@@ -29,6 +29,7 @@ rootProject.name = "WatchUp"
 include(":app")
 include(":core:ui")
 include(":core:data")
+include(":core:tmdb")
 include(":feature:home")
 include(":feature:library")
 include(":feature:search")

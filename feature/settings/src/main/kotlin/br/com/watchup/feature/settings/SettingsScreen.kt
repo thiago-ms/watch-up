@@ -45,6 +45,7 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import br.com.watchup.core.data.repo.BackupPrefs
 import br.com.watchup.core.data.repo.MidiaRepository
+import br.com.watchup.core.data.repo.TmdbPrefs
 import br.com.watchup.core.ui.component.PushScreenScaffold
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -58,6 +59,9 @@ private val FORMATO_DATA = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("pt", "BR
  * pasta (pode ser do Google Drive); o app grava/lê o `backup.json` nela. Backup
  * manual ("Fazer backup agora") e automático diário (WorkManager), com painel de
  * status. Sem OAuth, sem Drive API, sem rede direta do app.
+ *
+ * Também abriga as preferências de catálogo (TMDB) — hoje, o toggle do
+ * autopreenchimento do cadastro (item 17).
  */
 @Composable
 fun SettingsScreen(onBack: () -> Unit, onAbrirArquivadas: () -> Unit = {}) {
@@ -70,6 +74,7 @@ fun SettingsScreen(onBack: () -> Unit, onAbrirArquivadas: () -> Unit = {}) {
     var ultimaTentativa by remember { mutableLongStateOf(BackupPrefs.getUltimaTentativa(context)) }
     var ultimaTentativaOk by remember { mutableStateOf(BackupPrefs.getUltimaTentativaOk(context)) }
     var autoAtivo by remember { mutableStateOf(BackupPrefs.getAutoAtivo(context)) }
+    var autoPreencher by remember { mutableStateOf(TmdbPrefs.getAutoPreencher(context)) }
     var salvando by remember { mutableStateOf(false) }
     var confirmarRestauracao by remember { mutableStateOf(false) }
     var confirmarExclusao by remember { mutableStateOf(false) }
@@ -103,7 +108,12 @@ fun SettingsScreen(onBack: () -> Unit, onAbrirArquivadas: () -> Unit = {}) {
         AlertDialog(
             onDismissRequest = { confirmarRestauracao = false },
             title = { Text("Restaurar backup?") },
-            text = { Text("Isso substitui toda a sua biblioteca atual pelo conteúdo do backup.") },
+            text = {
+                Text(
+                    "Isso substitui toda a sua biblioteca atual pelo conteúdo do backup. " +
+                        "Se o backup tiver a chave do TMDB, ela também é restaurada.",
+                )
+            },
             confirmButton = {
                 TextButton(onClick = {
                     confirmarRestauracao = false
@@ -112,7 +122,10 @@ fun SettingsScreen(onBack: () -> Unit, onAbrirArquivadas: () -> Unit = {}) {
                         if (json == null) {
                             toast("Nenhum backup encontrado na pasta.")
                         } else {
-                            repo.importarJson(json)
+                            val chave = repo.importarJson(json)
+                            // Backup v1 (sem o campo) não pode apagar a chave atual:
+                            // só grava quando veio valor.
+                            if (!chave.isNullOrBlank()) TmdbPrefs.setApiKey(context, chave)
                             toast("Backup restaurado")
                         }
                     }
@@ -257,6 +270,34 @@ fun SettingsScreen(onBack: () -> Unit, onAbrirArquivadas: () -> Unit = {}) {
                 enabled = temPasta,
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Apagar backup") }
+
+            Spacer(Modifier.height(24.dp))
+            Text("Catálogo (TMDB)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(8.dp))
+
+            // Item 17 — autopreenchimento do cadastro a partir dos detalhes da obra.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Autopreencher o cadastro", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "Ao adicionar uma mídia pela busca, completa status, temporadas, " +
+                            "dia de lançamento e streamings com os dados do TMDB.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = autoPreencher,
+                    onCheckedChange = { on ->
+                        autoPreencher = on
+                        TmdbPrefs.setAutoPreencher(context, on)
+                    },
+                )
+            }
 
             Spacer(Modifier.height(24.dp))
             Text("Biblioteca", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)

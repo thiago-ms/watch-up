@@ -24,13 +24,22 @@ android {
         applicationId = "br.com.watchup"
         minSdk = 26
         targetSdk = 35
-        versionCode = 17
-        versionName = "1.16"
+        versionCode = 18
+        versionName = "1.17"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
+        // Keystore de debug fixa (versionada no repo) para todo build assinar igual.
+        // Sem isto o Gradle gera uma keystore efêmera dentro do container a cada
+        // build, e a atualização falha com INSTALL_FAILED_UPDATE_INCOMPATIBLE.
+        getByName("debug") {
+            storeFile = rootProject.file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
         if (temKeystore) {
             create("release") {
                 storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))

@@ -1,7 +1,8 @@
 #!/bin/bash
+port="${1:-8000}"
 ip=$(ip route get 1.1.1.1 2>/dev/null | grep -oP 'src \K[\d.]+')
 echo "ip: $ip"
-echo "url: $ip:8000/watchup-x.x-debug.apk"
+echo "url: http://$ip:$port/"
 #app=$(echo "${PWD##*/}")
 app="WatchUp"
 {
@@ -19,4 +20,4 @@ app="WatchUp"
   echo '</table>'
   echo '</body></html>'
 } > dist/index.html
-python3 -m http.server 8000 --bind 0.0.0.0 --directory dist
+python3 -m http.server "$port" --bind 0.0.0.0 --directory dist

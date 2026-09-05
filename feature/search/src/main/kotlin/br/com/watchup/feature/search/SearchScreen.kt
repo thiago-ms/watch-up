@@ -46,18 +46,31 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import br.com.watchup.core.tmdb.TmdbClient
+import br.com.watchup.core.tmdb.TmdbConfig
+import br.com.watchup.core.tmdb.TmdbException
+import br.com.watchup.core.tmdb.TmdbResultado
 import br.com.watchup.core.ui.component.MediaPoster
 import kotlinx.coroutines.launch
 
 /**
  * S008 — Buscar. Consulta o catálogo do TMDB (`/search/multi`) e lista título,
  * ano, tipo e pôster. Tocar num resultado abre o cadastro já pré-preenchido
- * (título, ano, tipo e a URL do pôster).
+ * (título, ano, tipo e a URL do pôster). O `id`/`tipoTmdb` também viajam: são o
+ * que permite o cadastro buscar os detalhes e se autopreencher (item 17).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchScreen(
-    onSelecionar: (titulo: String, ano: String?, tipoNome: String, generos: List<String>, posterUrl: String?) -> Unit,
+    onSelecionar: (
+        titulo: String,
+        ano: String?,
+        tipoNome: String,
+        generos: List<String>,
+        posterUrl: String?,
+        tmdbId: Int,
+        tmdbTipo: String,
+    ) -> Unit,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -164,7 +177,7 @@ fun SearchScreen(
                 ) {
                     items(resultados) { r ->
                         ResultadoRow(r, onClick = {
-                            onSelecionar(r.titulo, r.ano, r.tipo.name, r.generos, r.posterUrl)
+                            onSelecionar(r.titulo, r.ano, r.tipo.name, r.generos, r.posterUrl, r.id, r.tipoTmdb)
                         })
                     }
                 }

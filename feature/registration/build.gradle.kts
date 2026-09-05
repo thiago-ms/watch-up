@@ -33,6 +33,9 @@ dependencies {
     // :core:ui reexporta o BOM do Compose, o Material 3 e o :core:data (domínio/repositório).
     implementation(project(":core:ui"))
 
+    // Item 17: autopreenchimento do form com os detalhes da obra no TMDB.
+    implementation(project(":core:tmdb"))
+
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.kotlinx.coroutines.android)
 }

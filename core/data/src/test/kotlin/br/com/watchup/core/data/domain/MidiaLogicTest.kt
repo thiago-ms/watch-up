@@ -12,7 +12,9 @@ import br.com.watchup.core.data.domain.permiteVisto
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertNull
 import org.junit.Test
+import java.time.DayOfWeek
 import java.time.LocalDate
 
 /** Cobre as tabelas de decisão §5 (derivação de statusMidia, "Em dia", visibilidade). */
@@ -336,5 +338,80 @@ class MidiaLogicTest {
         val m = serie(StatusLancEpisodico.VAI_LANCAR, disp = 0, diaLancamento = "Quarta")
             .copy(statusData = StatusData.DEFINIDA, dataPrincipal = hoje.minusWeeks(2), dataBaseContagem = null)
         assertEquals(3, novosEpisodiosEstimados(m, hoje)) // estreia (quarta) + 2 quartas
+    }
+
+    // Dia da semana: rótulo ↔ DayOfWeek (item 14) -------------------------------
+    @Test
+    fun `rotulo do dia da semana casa com os rotulos do cadastro`() {
+        // Mesmos rótulos de DIAS_SEMANA (:feature:registration), na ordem Dom..Sáb.
+        val esperados = listOf("Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado")
+        val obtidos = listOf(
+            DayOfWeek.SUNDAY, DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY,
+            DayOfWeek.THURSDAY, DayOfWeek.FRIDAY, DayOfWeek.SATURDAY,
+        ).map(::rotuloDiaDaSemana)
+        assertEquals(esperados, obtidos)
+    }
+
+    @Test
+    fun `rotulo e dia da semana fazem ida e volta`() {
+        DayOfWeek.values().forEach { dia ->
+            assertEquals(dia, diaDaSemanaDe(rotuloDiaDaSemana(dia)))
+        }
+    }
+
+    @Test
+    fun `dia de lancamento e herdado da data de estreia`() {
+        // hoje = 2025-01-15 é quarta; estreia 2 semanas antes também é quarta.
+        val m = serie(StatusLancEpisodico.VAI_LANCAR, disp = 0)
+            .copy(statusData = StatusData.DEFINIDA, dataPrincipal = hoje.minusWeeks(2))
+        assertEquals("Quarta", diaLancamentoDerivado(m))
+    }
+
+    @Test
+    fun `dia de lancamento ja definido nao e sobrescrito`() {
+        val m = serie(StatusLancEpisodico.LANCANDO, disp = 8, diaLancamento = "Sexta")
+            .copy(statusData = StatusData.DEFINIDA, dataPrincipal = hoje.minusWeeks(2)) // quarta
+        assertEquals("Sexta", diaLancamentoDerivado(m))
+    }
+
+    @Test
+    fun `sem data de estreia nao ha dia a herdar`() {
+        assertNull(diaLancamentoDerivado(serie(StatusLancEpisodico.LANCANDO, disp = 8)))
+    }
+
+    // Conserto retroativo da série promovida (item 14) --------------------------
+    @Test
+    fun `serie lancando sem temporada disponivel e normalizada`() {
+        val m = serie(StatusLancEpisodico.LANCANDO, statusUsuario = StatusUsuario.ASSISTINDO)
+            .copy(
+                statusData = StatusData.DEFINIDA,
+                dataPrincipal = hoje.minusWeeks(2), // quarta
+                episodiosDispTempAtual = 3,
+            )
+        assertFalse(progressoAcessivel(m))
+
+        val corrigida = normalizarSerieLancando(m)!!
+        assertEquals(1, corrigida.temporadasDisponiveis)
+        assertEquals(1, corrigida.temporadaAtual)
+        assertEquals("Quarta", corrigida.diaLancamento)
+        assertTrue(progressoAcessivel(corrigida))
+    }
+
+    @Test
+    fun `normalizacao e idempotente`() {
+        val m = serie(StatusLancEpisodico.LANCANDO, statusUsuario = StatusUsuario.ASSISTINDO)
+            .copy(statusData = StatusData.DEFINIDA, dataPrincipal = hoje.minusWeeks(2))
+        val corrigida = normalizarSerieLancando(m)!!
+        assertNull(normalizarSerieLancando(corrigida))
+    }
+
+    @Test
+    fun `normalizacao nao toca em serie vai lancar nem em serie com temporadas`() {
+        // "Vai lançar" segue sem disponibilidade por design.
+        assertNull(normalizarSerieLancando(serie(StatusLancEpisodico.VAI_LANCAR, disp = 0)))
+        // Já consistente: nada a fazer.
+        assertNull(normalizarSerieLancando(serie(StatusLancEpisodico.LANCANDO, disp = 8)))
+        // Não-episódica nunca entra.
+        assertNull(normalizarSerieLancando(filme()))
     }
 }

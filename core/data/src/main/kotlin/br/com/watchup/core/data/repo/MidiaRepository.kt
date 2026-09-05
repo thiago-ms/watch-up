@@ -48,11 +48,19 @@ interface MidiaRepository {
         hoje: LocalDate = LocalDate.now(),
     )
 
-    /** Backup: serializa toda a biblioteca (mídias + episódios) em JSON. */
-    suspend fun exportarJson(): String
+    /**
+     * Backup: serializa toda a biblioteca (mídias + episódios) em JSON. A
+     * [tmdbApiKey] entra por parâmetro porque o repositório não tem `Context` para
+     * ler a pref — quem chama (o `BackupManager`) é que a lê.
+     */
+    suspend fun exportarJson(tmdbApiKey: String? = null): String
 
-    /** Restauração: substitui toda a biblioteca pelo conteúdo do JSON. */
-    suspend fun importarJson(json: String)
+    /**
+     * Restauração: substitui toda a biblioteca pelo conteúdo do JSON e devolve a API
+     * key do TMDB que veio no backup (`null` em backup v1 ou sem chave) — gravá-la é
+     * de quem tem `Context`.
+     */
+    suspend fun importarJson(json: String): String?
 
     companion object {
         @Volatile
@@ -122,14 +130,15 @@ class RoomMidiaRepository(
         }
     }
 
-    override suspend fun exportarJson(): String =
-        BackupSerializer.toJson(dao.listarTodas(), dao.listarTodosEpisodios())
+    override suspend fun exportarJson(tmdbApiKey: String?): String =
+        BackupSerializer.toJson(dao.listarTodas(), dao.listarTodosEpisodios(), tmdbApiKey)
 
-    override suspend fun importarJson(json: String) {
-        val (midias, episodios) = BackupSerializer.fromJson(json)
+    override suspend fun importarJson(json: String): String? {
+        val conteudo = BackupSerializer.fromJson(json)
         dao.limparEpisodios()
         dao.limparMidias()
-        midias.forEach { dao.inserir(it) }
-        episodios.forEach { dao.salvarEpisodios(it) }
+        conteudo.midias.forEach { dao.inserir(it) }
+        conteudo.episodios.forEach { dao.salvarEpisodios(it) }
+        return conteudo.tmdbApiKey
     }
 }

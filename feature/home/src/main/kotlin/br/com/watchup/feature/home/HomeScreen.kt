@@ -62,9 +62,12 @@ import br.com.watchup.core.ui.component.formatarData
 
 /**
  * S001 — Início/Home. Reúne "Continuar assistindo" (mídias episódicas em
- * andamento) e o radar de Lançamentos: filtros por tipo de data + duas seções —
- * "Em cartaz" (já estreou / no ar) e "Próximas datas" (unificada, cada item com a
- * tag da sua janela temporal: esta semana, semana que vem, este mês, … , sem data).
+ * andamento) e o radar de Lançamentos: filtros por tipo de data + quatro seções,
+ * agrupadas por tipo de mídia (item 12) — primeiro as não episódicas ("Em cartaz"
+ * e "Próximas datas"), depois as episódicas ("No ar" e "Próximos episódios").
+ * Nos blocos de já estreado cada linha mostra o status; nos de ainda por vir, a
+ * tag da janela temporal (esta semana, semana que vem, este mês, … , sem data).
+ * Bloco sem item nenhum não é renderizado.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -82,28 +85,19 @@ fun HomeScreen(
     // Itens 9 e 8: arquivadas e intenções de assistir não aparecem na Home.
     val ativas = remember(todas) { todas.orEmpty().filterNot { it.arquivada || it.intencao } }
     val emAndamento = remember(ativas) { emAndamento(ativas) }
-    // Radar: cada mídia com sua janela temporal (item 3). "Em cartaz" é seção própria;
-    // as demais entram numa única seção "Próximas datas", cada uma com sua tag.
+    // Radar: cada mídia com sua janela temporal (item 3).
     val radar = remember(ativas, filtro) {
         // Item 1: mídias já vistas não entram no radar da Home.
         ativas
             .filter { it.statusUsuario != StatusUsuario.VISTO && combinaFiltro(it, filtro) }
             .map { it to janelaData(it) }
     }
-    val emCartaz = remember(radar) {
-        radar.filter { it.second == JanelaData.EM_CARTAZ }
-            .sortedWith(compareBy(nullsLast<LocalDate>()) { it.first.dataPrincipal })
-            .map { it.first }
-    }
-    // Item 2: ordenar por janela (mais próxima primeiro) e, dentro dela, por data;
-    // itens sem data fixa vão ao fim.
-    val proximas = remember(radar) {
-        radar.filter { it.second != JanelaData.EM_CARTAZ }
-            .sortedWith(
-                compareBy<Pair<Midia, JanelaData>> { it.second.prioridade }
-                    .thenComparing(compareBy(nullsLast<LocalDate>()) { it.first.dataPrincipal }),
-            )
-    }
+    // Item 12: o radar vira quatro blocos, cruzando janela (já estreou × ainda por vir)
+    // com tipo (não episódica × episódica, via TipoMidia.episodica).
+    val emCartaz = remember(radar) { jaEstreou(radar, episodicas = false) }
+    val proximasDatas = remember(radar) { aindaPorVir(radar, episodicas = false) }
+    val noAr = remember(radar) { jaEstreou(radar, episodicas = true) }
+    val proximosEpisodios = remember(radar) { aindaPorVir(radar, episodicas = true) }
 
     Scaffold(
         topBar = { TopAppBar(title = { Text("WatchUp") }) },
@@ -173,39 +167,72 @@ fun HomeScreen(
             }
             Spacer(Modifier.height(12.dp))
 
-            // Seção "Em cartaz" — o que já estreou / está no ar.
-            if (emCartaz.isNotEmpty()) {
-                SectionHeader("Em cartaz", trailing = "${emCartaz.size}")
-                Spacer(Modifier.height(8.dp))
-                emCartaz.forEach { midia ->
-                    LancamentoRow(midia = midia, onClick = { onOpenDetail(midia.id) })
-                    Spacer(Modifier.height(8.dp))
-                }
-                Spacer(Modifier.height(12.dp))
-            }
-
-            // Seção unificada "Próximas datas" — cada item com a tag da sua janela.
-            SectionHeader("Próximas datas", trailing = "${proximas.size}")
-            Spacer(Modifier.height(8.dp))
-            if (proximas.isEmpty()) {
+            // Os quatro blocos, não episódicas antes das episódicas. Cada um some
+            // quando está vazio; se nenhum sobrou, o aviso do filtro cobre todos.
+            if (radar.isEmpty()) {
                 Text(
                     "Nenhum item neste filtro.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-            } else {
-                proximas.forEach { (midia, janela) ->
-                    LancamentoRow(
-                        midia = midia,
-                        janela = janela,
-                        onClick = { onOpenDetail(midia.id) },
-                    )
-                    Spacer(Modifier.height(8.dp))
-                }
+                Spacer(Modifier.height(12.dp))
             }
-            Spacer(Modifier.height(12.dp))
+            BlocoLancamentos("Em cartaz", emCartaz, onOpenDetail)
+            BlocoLancamentos("Próximas datas", proximasDatas, onOpenDetail)
+            BlocoLancamentos("No ar", noAr, onOpenDetail)
+            BlocoLancamentos("Próximos episódios", proximosEpisodios, onOpenDetail)
         }
     }
+}
+
+/**
+ * Blocos "Em cartaz" (não episódicas) e "No ar" (episódicas): o que já estreou,
+ * ordenado por data, com os sem data ao fim. A janela vai nula porque nesses blocos
+ * a linha mostra o status da mídia, não a tag temporal.
+ */
+private fun jaEstreou(
+    radar: List<Pair<Midia, JanelaData>>,
+    episodicas: Boolean,
+): List<Pair<Midia, JanelaData?>> =
+    radar
+        .filter { it.second == JanelaData.EM_CARTAZ && it.first.tipo.episodica == episodicas }
+        .sortedWith(compareBy(nullsLast<LocalDate>()) { it.first.dataPrincipal })
+        .map { it.first to null }
+
+/**
+ * Blocos "Próximas datas" (não episódicas) e "Próximos episódios" (episódicas).
+ * Item 2: ordena por janela (mais próxima primeiro) e, dentro dela, por data;
+ * itens sem data fixa vão ao fim.
+ */
+private fun aindaPorVir(
+    radar: List<Pair<Midia, JanelaData>>,
+    episodicas: Boolean,
+): List<Pair<Midia, JanelaData?>> =
+    radar
+        .filter { it.second != JanelaData.EM_CARTAZ && it.first.tipo.episodica == episodicas }
+        .sortedWith(
+            compareBy<Pair<Midia, JanelaData>> { it.second.prioridade }
+                .thenComparing(compareBy(nullsLast<LocalDate>()) { it.first.dataPrincipal }),
+        )
+
+/**
+ * Um bloco do radar: cabeçalho com contador + as linhas. Bloco vazio não é
+ * renderizado (item 12) — nenhum dos quatro tem placeholder próprio.
+ */
+@Composable
+private fun BlocoLancamentos(
+    titulo: String,
+    itens: List<Pair<Midia, JanelaData?>>,
+    onOpenDetail: (Long) -> Unit,
+) {
+    if (itens.isEmpty()) return
+    SectionHeader(titulo, trailing = "${itens.size}")
+    Spacer(Modifier.height(8.dp))
+    itens.forEach { (midia, janela) ->
+        LancamentoRow(midia = midia, janela = janela, onClick = { onOpenDetail(midia.id) })
+        Spacer(Modifier.height(8.dp))
+    }
+    Spacer(Modifier.height(12.dp))
 }
 
 @Composable
@@ -282,7 +309,7 @@ private fun LancamentoRow(midia: Midia, onClick: () -> Unit, janela: JanelaData?
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            // "Próximas datas" mostra a tag da janela; "Em cartaz" mostra o status.
+            // Blocos do que ainda vem mostram a tag da janela; os de já estreado, o status.
             Box { if (janela != null) JanelaTag(janela) else StatusMidiaChip(deriveStatusMidia(midia)) }
         }
     }

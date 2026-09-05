@@ -18,6 +18,12 @@ Legenda de tipo: 🐛 bug · ✨ melhoria · 🔧 ajuste
 | 9 | ✨ | Archive para limpar a biblioteca ativa | feito (validar no device) |
 | 10 | 🔧 | Biblioteca: esconder vistos por padrão | feito (validar no device) |
 | 11 | ✨ | Favoritos + filtro na biblioteca | feito (validar no device) |
+| 12 | 🔧 | Home: separar episódicas de não episódicas em 4 blocos | feito (validar no device) |
+| 13 | 🔧 | Chave do TMDB no backup | feito (validar no device) |
+| 14 | 🐛 | Série promovida pela estimativa não habilita progresso nem temporadas | feito (validar no device) |
+| 15 | 🔧 | Form: infos pessoais numa etapa final "Sobre você" | feito (validar no device) |
+| 16 | 🔧 | Módulo `:core:tmdb` | feito (validar no device) |
+| 17 | ✨ | Autopreenchimento do form via API do TMDB (com toggle) | feito (validar no device) |
 
 ## Histórico de entregas
 
@@ -35,9 +41,17 @@ linha correspondente com a versão (`versionName`) usada no build.
 | 1.14 | 8 | Cadastro "intenção de assistir" (rascunho parcial + modo na biblioteca) |
 | 1.15 | 4 | Novos episódios cientes do dia-da-semana (contagem por calendário quando semanal) |
 | 1.16 | 3, 4 | Fixes: "vai lançar" com estreia passada não mostra mais tag "Em breve" no bloco "Em cartaz"; stepper −/+ de episódios reancora a data-base da contagem; Detalhe sem título na barra superior |
+| 1.17 | 12, 13, 14, 15, 16, 17 | Home em 4 blocos (não episódicas antes das episódicas) · chave do TMDB no backup (`VERSION` 2) · série promovida pela estimativa passa a abrir temporada, herdar o dia da semana da estreia e consertar registros já quebrados · form com etapa final "Sobre você" (contexto + onde assistir) · módulo `:core:tmdb` (cliente saiu de `:feature:search`) · autopreenchimento do cadastro pela API do TMDB, com toggle em Ajustes |
 
 > Migrações de banco acumuladas até a v1.14: schema Room v4 → v8 (favorito, arquivada,
 > cadência+data-base, intenção) — todas incrementais, preservando a biblioteca.
+> **A v1.17 não mexeu no schema** (segue v8): o autopreenchimento do TMDB não persiste
+> `tmdbId`, por decisão de escopo.
+
+> ⚠️ A v1.17 foi publicada **sem gate de aparelho** (pulado a pedido) e **sem commit nem
+> tag**. Os seis itens estão marcados "validar no device" ao pé da letra: ninguém abriu
+> este APK. O item 17 é o mais exposto — o mapa de nomes de streaming e a inferência do
+> dia da semana nunca foram validados contra resposta real da API do TMDB.
 
 ---
 
@@ -142,3 +156,123 @@ usuário **clicar para ver os vistos**.
 
 ## 11. ✨ Favoritos + filtro na biblioteca
 Criar **favoritos** e permitir **filtrar só os favoritos** na biblioteca.
+
+## 12. 🔧 Home: separar episódicas de não episódicas em 4 blocos
+Hoje "Em cartaz" mistura filme e série, o que não é legal. Cada janela ganha um bloco
+por natureza, e os episódicos vêm depois dos não episódicos.
+
+- Ordem decidida (agrupada por tipo): `Em cartaz` (filmes) → `Próximas datas` (filmes)
+  → `No ar` (séries) → `Próximos episódios` (séries).
+- Toda a mudança cabe em `HomeScreen.kt:93-106` (onde `emCartaz`/`proximas` nascem do
+  `radar`) e `:176-206` (renderização). O discriminador **já existe**:
+  `TipoMidia.episodica` (`Enums.kt:11-20`).
+- "Episódica" inclui `SERIE`, `ANIME`, `REALITY` e `PROGRAMA` — não só `SERIE`.
+- Blocos vazios somem; nenhum dos quatro mantém o placeholder "Nenhum item neste filtro."
+- `LancamentoRow` e `SectionHeader` são reusados sem mudança. Nada fora de
+  `:feature:home` precisa compilar diferente, e não há migração de Room.
+
+## 13. 🔧 Chave do TMDB no backup
+A chave da API do TMDB não sobrevive a um restore — o backup só carrega `midias` e
+`episodios`.
+
+- `BackupSerializer.kt:20-64`: campo `tmdbApiKey` no root e `VERSION` **1 → 2**. O
+  `fromJson` lê com valor opcional, então backup v1 continua carregando (chave ausente
+  = nula).
+- **Bloqueio estrutural**: a chave mora em `TmdbConfig` (`:feature:search`, prefs
+  `watchup_tmdb`), e `:feature:settings` **não depende** de `:feature:search`. Além
+  disso o `MidiaRepositoryImpl` não tem `Context`, então a chave precisa entrar e sair
+  por parâmetro (`exportarJson(tmdbApiKey)`, `importarJson` devolvendo a chave).
+  `BackupManager` é a única camada do caminho de backup que tem `Context`.
+- Decidido: chave em **texto puro** (é de leitura e gratuita, impacto de vazamento
+  baixo), salvando **só a digitada pelo usuário** — nunca a efetiva, para não vazar a
+  `BuildConfig.TMDB_API_KEY` embutida no build para dentro do JSON.
+- Restaurar só grava se o backup trouxer valor **não-vazio**, para um backup v1 não
+  apagar a chave atual.
+
+## 14. 🐛 Série promovida pela estimativa não habilita progresso nem temporadas
+Depois que a série estreia e a estimativa atualiza os episódios, o botão "Atualizar
+progresso" não aparece e a quantidade de temporadas fica ineditável.
+
+- **Causa**: o `copy` de `DetailScreen.kt:219-234` promove para `LANCANDO` mas deixa
+  `temporadasDisponiveis` e `temporadaAtual` em `0`. Com zero temporadas,
+  `progressoAcessivel` (`MidiaLogic.kt:98-104`) é falso → o card não renderiza
+  (`DetailScreen.kt:201`), e o bloco "Episódios por temporada" some (`:244`).
+- **Dois casos, tratamento diferente** (decidido):
+  - *série nova* (0 temporadas) → assume **1** temporada;
+  - *temporada nova* (N temporadas) → vira **N+1**, `temporadaAtual` = N+1 e os
+    episódios **recomeçam do zero**. Hoje `DetailScreen.kt:221` faz
+    `episodiosDispTempAtual + novos`, somando os da temporada anterior — bug adjacente
+    que entra na mesma correção.
+- **Dia da semana**: assumir o mesmo dia da semana de `dataPrincipal` e **persistir** em
+  `diaLancamento` (não usar só como fallback de cálculo). **Não sobrescrever** se já
+  houver valor. Falta o inverso de `diaDaSemanaDe` (`MidiaLogic.kt:123-132`); ele nasce
+  em `:core:data`, porque `DIAS_SEMANA` está em `:feature:registration` e feature não
+  depende de feature.
+- **Correção retroativa**: séries já gravadas em estado inconsistente (`LANCANDO` com 0
+  temporadas) precisam ser consertadas também — corrigir só o botão não conserta o
+  registro que já existe.
+- **Não mexer em `statusUsuario`** (decidido): `progressoAcessivel` também exige
+  `ASSISTINDO`, então uma série em "Quero assistir" segue sem card por design.
+- Efeito colateral desejado na Home: com `diaLancamento` preenchido, `janelaData`
+  (`MidiaLogic.kt:231-236`) passa a classificar como `EM_CARTAZ` em vez de "Sem data".
+
+## 15. 🔧 Form: infos pessoais numa etapa final "Sobre você"
+O form mistura informação da obra com informação pessoal. Contexto de consumo e onde
+vai assistir passam para uma etapa final.
+
+- Decidido: **etapa única "Sobre você"** juntando os dois; `ONDE_ASSISTIR` deixa de
+  existir e o form vai de **6 para 5 etapas**:
+  `Tipo → Título → Gênero → Datas e status → Sobre você → Confirmar`.
+- Recortar o bloco "Contexto de consumo" de `PassoDetalhes`
+  (`RegistrationScreen.kt:364-375`); a etapa `DETALHES`, ao perder o contexto, passa a
+  se chamar **"Gênero"**.
+- Mover as validações junto: o ramo `DETALHES` de `validarPasso`
+  (`RegistrationModel.kt:128`, contexto nulo) e o ramo `ONDE_ASSISTIR` (`:134`).
+- **Armadilha que não quebra compilação**: `DetailScreen.kt:82-84` tem
+  `ETAPA_DETALHES = 2`, `ETAPA_ONDE_ASSISTIR = 3`, `ETAPA_DATAS_STATUS = 4` — números
+  literais que espelham o enum. Mudar a ordem sem renumerar isso faz a ficha
+  (`:439-441`) abrir a etapa errada, em silêncio.
+- Sem migração de Room: `FormDraft` e `Midia` mantêm os mesmos campos.
+
+## 16. 🔧 Módulo `:core:tmdb`
+`TmdbClient`/`TmdbConfig` vivem em `:feature:search`, e a regra do projeto é que feature
+não depende de feature — então `:feature:registration` não consegue chamar o cliente
+onde ele está. É o pré-requisito do item 17.
+
+- Decidido: **módulo `:core:tmdb` novo**, não empurrar para `:core:data` — mantém
+  `:core:data` só com Room e não obriga `buildConfig = true` lá.
+- O bloco de resolução da chave do `feature/search/build.gradle.kts:9-27,41`
+  (`-PtmdbApiKey` / env / `local.properties` + `buildConfigField`) viaja junto.
+- `TmdbConfig` pode ficar em `:feature:search` como wrapper fino que delega, para não
+  mexer nos 5 call-sites de `SearchScreen.kt`.
+
+## 17. ✨ Autopreenchimento do form via API do TMDB (com toggle)
+Ao ir da busca para o form, buscar os detalhes no TMDB e preencher o máximo possível.
+Com um toggle para desligar — desligado, o form funciona exatamente como hoje.
+
+- **Bloqueio nº 1**: `TmdbResultado` (`TmdbClient.kt:11`) **não carrega `id` nem
+  `media_type`**, embora o `parsear()` já leia os dois e os descarte. Sem propagá-los
+  por `SearchScreen.onSelecionar` → `Routes.registrationPrefill` (`Routes.kt:44-56`) →
+  `WatchUpApp.kt:132-140` até a tela, nada mais é implementável.
+- Busca em `/tv/{id}?language=pt-BR&append_to_response=watch/providers`, no
+  `LaunchedEffect` de `RegistrationScreen.kt:113`, com loading próprio e **falha
+  silenciosa** — o form tem que continuar utilizável se o TMDB cair.
+- Cobertura real, campo a campo: `ano`/`dataTexto` (`first_air_date`),
+  `statusLancEpisodico` (`status`: `Ended`→COMPLETA, `Canceled`→CANCELADA,
+  `Returning Series`/`In Production`→LANCANDO, `Planned`→VAI_LANCAR),
+  `temporadasDisponiveis` (`number_of_seasons`, filtrando `season_number > 0`),
+  `episodiosDispTempAtual` (`seasons[].episode_count`), `generos` (já alinhados a
+  pt-BR), `streamings` (`watch/providers.results.BR.flatrate[]`), `diaLancamento`
+  (inferido do dia da semana de `next_episode_to_air.air_date`).
+- **`horarioLancamento` é impossível** — o TMDB não expõe horário de exibição em nenhum
+  endpoint. Continua manual para sempre.
+- **Mapa de normalização de streaming necessário**: TMDB devolve `Amazon Prime Video`,
+  `Disney Plus`, `Paramount Plus`; `STREAMINGS_DISPONIVEIS` (`Enums.kt:73-91`) usa
+  `Prime`, `Disney+`, `Paramount+`. **Não validado contra resposta real da API.**
+- Escopo decidido: **só cadastro novo vindo da busca**. Não persiste `tmdbId`, logo
+  **nenhuma migração de Room** (schema fica na v8). Sem isso não existe "atualizar do
+  TMDB" em mídia já cadastrada — fica para um item futuro.
+- O autopreenchimento **nunca** toca `temporadaAtual` nem `ultimoEpisodioVisto`, que são
+  progresso pessoal e não disponibilidade.
+- Toggle na tela de Ajustes, no padrão do `Switch` de "Backup automático"
+  (`SettingsScreen.kt:200-220`), em seção nova.

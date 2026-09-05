@@ -23,6 +23,9 @@ dist/
 keystore/
 *.jks
 *.keystore
+# ...menos a debug.keystore da raiz, versionada de propósito: sem ela cada build
+# gera uma assinatura nova e a atualização falha com INSTALL_FAILED_UPDATE_INCOMPATIBLE.
+!debug.keystore
 
 # SO
 .DS_Store

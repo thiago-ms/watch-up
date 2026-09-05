@@ -10,6 +10,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import br.com.watchup.core.data.repo.BackupPrefs
 import br.com.watchup.core.data.repo.MidiaRepository
+import br.com.watchup.core.data.repo.TmdbPrefs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
@@ -33,7 +34,10 @@ object BackupManager {
             return@withContext false
         }
         val ok = runCatching {
-            val json = MidiaRepository.get(context).exportarJson()
+            // Só a chave digitada pelo usuário vai para o backup — nunca a efetiva do
+            // TmdbConfig, senão a chave embutida no build vazaria para o JSON.
+            val chave = TmdbPrefs.getApiKey(context).takeIf { it.isNotBlank() }
+            val json = MidiaRepository.get(context).exportarJson(chave)
             escrever(context, Uri.parse(uriStr), json)
         }.getOrDefault(false)
         BackupPrefs.registrarTentativa(context, agora, ok)

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
@@ -70,6 +71,9 @@ import br.com.watchup.core.data.model.StatusLancEpisodico
 import br.com.watchup.core.data.model.StatusUsuario
 import br.com.watchup.core.data.model.TipoMidia
 import br.com.watchup.core.data.repo.MidiaRepository
+import br.com.watchup.core.data.repo.TmdbPrefs
+import br.com.watchup.core.tmdb.TmdbClient
+import br.com.watchup.core.tmdb.TmdbConfig
 import br.com.watchup.core.ui.component.PushScreenScaffold
 import br.com.watchup.core.ui.component.formatarData
 import java.time.LocalDate
@@ -77,7 +81,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
- * S010–S015 (cadastro) e S018 (edição). Wizard de 6 etapas com barra de progresso,
+ * S010–S015 (cadastro) e S018 (edição). Wizard de 5 etapas + confirmação, com barra de progresso,
  * validação por etapa (§5.4) e visibilidade condicional (§5.1). Ao confirmar,
  * persiste (Room) com toast de sucesso e erro acionável ("Tentar novamente").
  * A edição pode abrir direto numa etapa via [passoInicial].
@@ -94,6 +98,9 @@ fun RegistrationScreen(
     prefTipo: String? = null,
     prefGeneros: String? = null, // nomes juntos por "|"
     prefPosterUrl: String? = null,
+    // Identidade da obra no TMDB (item 17): habilita o autopreenchimento.
+    prefTmdbId: Int = 0,
+    prefTmdbTipo: String? = null, // "movie" ou "tv"
 ) {
     val context = LocalContext.current
     val repo = remember { MidiaRepository.get(context) }
@@ -108,6 +115,7 @@ fun RegistrationScreen(
 
     var salvando by remember { mutableStateOf(false) }
     var erroSalvar by remember { mutableStateOf(false) }
+    var autopreenchendo by remember { mutableStateOf(false) } // item 17: consulta em curso
 
     // Inicialização única: edição carrega a mídia e pode abrir numa etapa específica.
     LaunchedEffect(midiaId) {
@@ -126,6 +134,21 @@ fun RegistrationScreen(
                 generos = generos,
                 posterUrl = prefPosterUrl?.ifBlank { null },
             )
+
+            // Item 17 — autopreenchimento: busca os detalhes da obra (status, temporadas,
+            // dia de lançamento, streamings) e completa o que ficou vazio. É opcional e
+            // falha em silêncio: sem chave, sem rede ou com o toggle desligado, o form
+            // segue exatamente como era, com o prefill da busca.
+            if (prefTmdbId > 0 && TmdbPrefs.getAutoPreencher(context) && TmdbConfig.temChave(context)) {
+                autopreenchendo = true
+                val detalhes = TmdbClient.detalhar(
+                    apiKey = TmdbConfig.getApiKey(context),
+                    id = prefTmdbId,
+                    tipoTmdb = prefTmdbTipo.orEmpty(),
+                )
+                if (detalhes != null) draft = draft.completarComTmdb(detalhes)
+                autopreenchendo = false
+            }
         }
         iniciado = true
     }
@@ -228,14 +251,29 @@ fun RegistrationScreen(
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+
+                // Item 17: aviso discreto enquanto o TMDB responde — o form continua
+                // utilizável, o preenchimento só completa o que ainda estiver vazio.
+                if (autopreenchendo) {
+                    Spacer(Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "Buscando detalhes no TMDB…",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
                 Spacer(Modifier.height(12.dp))
 
                 when (passo) {
                     PassoCadastro.TIPO -> PassoTipo(draft) { draft = it }
                     PassoCadastro.TITULO -> PassoTitulo(draft) { draft = it }
-                    PassoCadastro.DETALHES -> PassoDetalhes(draft) { draft = it }
-                    PassoCadastro.ONDE_ASSISTIR -> PassoOndeAssistir(draft) { draft = it }
+                    PassoCadastro.GENERO -> PassoGenero(draft) { draft = it }
                     PassoCadastro.DATAS_STATUS -> PassoDatasStatus(draft) { draft = it }
+                    PassoCadastro.SOBRE_VOCE -> PassoSobreVoce(draft) { draft = it }
                     PassoCadastro.CONFIRMAR -> PassoConfirmar(draft, erroSalvar)
                 }
 
@@ -323,10 +361,11 @@ private fun PassoTitulo(d: FormDraft, onChange: (FormDraft) -> Unit) {
     )
 }
 
+/** Só o que é da obra: o contexto de consumo migrou para [PassoSobreVoce] (item 15). */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun PassoDetalhes(d: FormDraft, onChange: (FormDraft) -> Unit) {
-    Text("Gênero", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+private fun PassoGenero(d: FormDraft, onChange: (FormDraft) -> Unit) {
+    Text("Qual o gênero?", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
     Spacer(Modifier.height(8.dp))
     // Seleção múltipla. A ordem do vocabulário + os que já vieram (ex.: da busca).
     val opcoes = remember(d.generos) {
@@ -360,81 +399,6 @@ private fun PassoDetalhes(d: FormDraft, onChange: (FormDraft) -> Unit) {
         Checkbox(checked = d.semGenero, onCheckedChange = null)
         Spacer(Modifier.width(8.dp))
         Text("Sem gênero")
-    }
-    Spacer(Modifier.height(16.dp))
-    Text("Contexto de consumo", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-    Spacer(Modifier.height(8.dp))
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Contexto.entries.forEach { c ->
-            FilterChip(
-                selected = d.contexto == c,
-                onClick = { onChange(d.copy(contexto = c)) },
-                label = { Text(c.rotulo) },
-            )
-        }
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun PassoOndeAssistir(d: FormDraft, onChange: (FormDraft) -> Unit) {
-    Text("Onde vai assistir?", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-    Spacer(Modifier.height(8.dp))
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Modalidade.entries.forEach { mod ->
-            FilterChip(
-                selected = d.modalidade == mod,
-                onClick = { onChange(d.copy(modalidade = mod)) },
-                label = { Text(mod.rotulo) },
-            )
-        }
-    }
-
-    if (d.modalidade == Modalidade.STREAMING) {
-        Spacer(Modifier.height(16.dp))
-        Text("Streamings (toque na ★ p/ o principal)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(8.dp))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            STREAMINGS_DISPONIVEIS.forEach { s ->
-                val marcado = s in d.streamings
-                FilterChip(
-                    selected = marcado,
-                    onClick = {
-                        val novos = if (marcado) d.streamings - s else d.streamings + s
-                        val principal = d.streamingPrincipal?.takeIf { it in novos }
-                        onChange(d.copy(streamings = novos, streamingPrincipal = principal))
-                    },
-                    label = { Text(s) },
-                    trailingIcon = if (marcado) {
-                        {
-                            IconButton(onClick = { onChange(d.copy(streamingPrincipal = s)) }, modifier = Modifier.height(20.dp)) {
-                                Icon(
-                                    if (d.streamingPrincipal == s) Icons.Filled.Star else Icons.Filled.StarBorder,
-                                    contentDescription = "Definir como principal",
-                                )
-                            }
-                        }
-                    } else {
-                        null
-                    },
-                )
-            }
-        }
-    }
-
-    if (d.modalidade == Modalidade.CINEMA) {
-        Spacer(Modifier.height(16.dp))
-        Text("Rede de cinema", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(8.dp))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            REDES_CINEMA.forEach { rede ->
-                FilterChip(
-                    selected = d.cinemaRede == rede,
-                    onClick = { onChange(d.copy(cinemaRede = rede)) },
-                    label = { Text(rede) },
-                )
-            }
-        }
     }
 }
 
@@ -608,6 +572,87 @@ private fun PassoDatasStatus(d: FormDraft, onChange: (FormDraft) -> Unit) {
     }
 }
 
+/**
+ * Item 15 — etapa final com o que é pessoal (e não da obra): contexto de consumo
+ * e onde vai assistir, que antes ficavam espalhados por "Detalhes" e por uma
+ * etapa própria "Onde assistir".
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PassoSobreVoce(d: FormDraft, onChange: (FormDraft) -> Unit) {
+    Text("Contexto de consumo", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+    Spacer(Modifier.height(8.dp))
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Contexto.entries.forEach { c ->
+            FilterChip(
+                selected = d.contexto == c,
+                onClick = { onChange(d.copy(contexto = c)) },
+                label = { Text(c.rotulo) },
+            )
+        }
+    }
+
+    Spacer(Modifier.height(16.dp))
+    Text("Onde vai assistir?", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+    Spacer(Modifier.height(8.dp))
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Modalidade.entries.forEach { mod ->
+            FilterChip(
+                selected = d.modalidade == mod,
+                onClick = { onChange(d.copy(modalidade = mod)) },
+                label = { Text(mod.rotulo) },
+            )
+        }
+    }
+
+    if (d.modalidade == Modalidade.STREAMING) {
+        Spacer(Modifier.height(16.dp))
+        Text("Streamings (toque na ★ p/ o principal)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(8.dp))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            STREAMINGS_DISPONIVEIS.forEach { s ->
+                val marcado = s in d.streamings
+                FilterChip(
+                    selected = marcado,
+                    onClick = {
+                        val novos = if (marcado) d.streamings - s else d.streamings + s
+                        val principal = d.streamingPrincipal?.takeIf { it in novos }
+                        onChange(d.copy(streamings = novos, streamingPrincipal = principal))
+                    },
+                    label = { Text(s) },
+                    trailingIcon = if (marcado) {
+                        {
+                            IconButton(onClick = { onChange(d.copy(streamingPrincipal = s)) }, modifier = Modifier.height(20.dp)) {
+                                Icon(
+                                    if (d.streamingPrincipal == s) Icons.Filled.Star else Icons.Filled.StarBorder,
+                                    contentDescription = "Definir como principal",
+                                )
+                            }
+                        }
+                    } else {
+                        null
+                    },
+                )
+            }
+        }
+    }
+
+    if (d.modalidade == Modalidade.CINEMA) {
+        Spacer(Modifier.height(16.dp))
+        Text("Rede de cinema", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(8.dp))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            REDES_CINEMA.forEach { rede ->
+                FilterChip(
+                    selected = d.cinemaRede == rede,
+                    onClick = { onChange(d.copy(cinemaRede = rede)) },
+                    label = { Text(rede) },
+                )
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DiaSemanaDropdown(valor: String, onSelecionar: (String) -> Unit, modifier: Modifier = Modifier) {
@@ -659,8 +704,6 @@ private fun PassoConfirmar(d: FormDraft, erroSalvar: Boolean) {
             Resumo("Título", d.titulo)
             Resumo("Ano", d.ano.ifBlank { "—" })
             Resumo("Gênero", d.generos.takeIf { it.isNotEmpty() }?.joinToString(", ") ?: "Sem gênero")
-            Resumo("Contexto", d.contexto?.rotulo)
-            Resumo("Onde assistir", resumoOnde(d))
             if (d.episodica) {
                 Resumo("Status de lançamento", d.statusLancEpisodico?.rotulo)
                 if (d.statusLancEpisodico == StatusLancEpisodico.VAI_LANCAR && d.vaiLancarTipo != null) {
@@ -680,6 +723,9 @@ private fun PassoConfirmar(d: FormDraft, erroSalvar: Boolean) {
                 }
             }
             Resumo("Seu status", d.statusUsuario?.rotulo)
+            // "Sobre você" fecha o resumo na mesma ordem em que o wizard pergunta.
+            Resumo("Contexto", d.contexto?.rotulo)
+            Resumo("Onde assistir", resumoOnde(d))
         }
     }
 

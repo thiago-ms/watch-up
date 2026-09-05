@@ -13,17 +13,37 @@ import org.json.JSONObject
 import java.time.LocalDate
 
 /**
+ * Conteúdo de um backup já lido: a biblioteca e a API key do TMDB (`null` em backup
+ * v1, que não tinha o campo).
+ */
+data class ConteudoBackup(
+    val midias: List<Midia>,
+    val episodios: List<EpisodiosTemporada>,
+    val tmdbApiKey: String?,
+)
+
+/**
  * (De)serialização do backup da biblioteca em JSON (via `org.json`, sem lib extra).
  * Usado pelo backup via SAF — grava/le um único `backup.json`. Enums viram `name`,
  * `LocalDate` vira ISO-8601 e a lista de streamings vira um array.
+ *
+ * Formato v2 acrescenta `tmdbApiKey` no root — a chave do TMDB digitada pelo usuário,
+ * em texto puro (é chave de leitura, gratuita), para que restaurar num aparelho novo
+ * já devolva a busca funcionando. Backup v1 (sem o campo) continua sendo lido.
  */
 object BackupSerializer {
 
-    private const val VERSION = 1
+    private const val VERSION = 2
 
-    fun toJson(midias: List<Midia>, episodios: List<EpisodiosTemporada>): String {
+    fun toJson(
+        midias: List<Midia>,
+        episodios: List<EpisodiosTemporada>,
+        tmdbApiKey: String? = null,
+    ): String {
         val root = JSONObject()
         root.put("version", VERSION)
+        // Só grava quando há chave: backup sem chave não carrega o campo à toa.
+        tmdbApiKey?.trim()?.takeIf { it.isNotEmpty() }?.let { root.put("tmdbApiKey", it) }
 
         val arrMidias = JSONArray()
         midias.forEach { arrMidias.put(midiaToJson(it)) }
@@ -42,7 +62,7 @@ object BackupSerializer {
         return root.toString(2)
     }
 
-    fun fromJson(json: String): Pair<List<Midia>, List<EpisodiosTemporada>> {
+    fun fromJson(json: String): ConteudoBackup {
         val root = JSONObject(json)
 
         val midias = root.optJSONArray("midias")?.let { arr ->
@@ -60,7 +80,12 @@ object BackupSerializer {
             }
         }.orEmpty()
 
-        return midias to episodios
+        return ConteudoBackup(
+            midias = midias,
+            episodios = episodios,
+            // Ausente no v1 e vazio quando o aparelho de origem não tinha chave.
+            tmdbApiKey = root.strOrNull("tmdbApiKey")?.trim()?.takeIf { it.isNotEmpty() },
+        )
     }
 
     private fun midiaToJson(m: Midia): JSONObject = JSONObject().apply {

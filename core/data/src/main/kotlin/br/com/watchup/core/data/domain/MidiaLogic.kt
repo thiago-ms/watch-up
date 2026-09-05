@@ -132,6 +132,51 @@ fun diaDaSemanaDe(rotulo: String?): DayOfWeek? = when (rotulo?.trim()?.lowercase
 }
 
 /**
+ * Inverso de [diaDaSemanaDe]: rótulo PT de um [DayOfWeek]. Os rótulos casam com os
+ * do seletor do cadastro (`DIAS_SEMANA`, em `:feature:registration`) — mora aqui
+ * porque feature não depende de feature e a promoção no Detalhe precisa dele.
+ */
+fun rotuloDiaDaSemana(dia: DayOfWeek): String = when (dia) {
+    DayOfWeek.SUNDAY -> "Domingo"
+    DayOfWeek.MONDAY -> "Segunda"
+    DayOfWeek.TUESDAY -> "Terça"
+    DayOfWeek.WEDNESDAY -> "Quarta"
+    DayOfWeek.THURSDAY -> "Quinta"
+    DayOfWeek.FRIDAY -> "Sexta"
+    DayOfWeek.SATURDAY -> "Sábado"
+}
+
+/**
+ * Dia-da-semana a gravar quando a série passa a lançar: preserva o que já existe e,
+ * só na ausência dele, **herda o dia de [Midia.dataPrincipal]** (a estreia). Devolve
+ * null quando não há como derivar (sem data). Nunca sobrescreve escolha do usuário.
+ */
+fun diaLancamentoDerivado(m: Midia): String? =
+    m.diaLancamento?.takeIf { it.isNotBlank() }
+        ?: m.dataPrincipal?.let { rotuloDiaDaSemana(it.dayOfWeek) }
+
+/**
+ * Conserta retroativamente a episódica que ficou **"Lançando" sem disponibilidade**
+ * (`temporadasDisponiveis == 0`) — estado que a promoção pela estimativa gravava
+ * antes da correção do item 14 e que esconde o card de progresso
+ * ([progressoAcessivel]) e a lista de "Episódios por temporada". Assume a
+ * temporada 1 e herda o dia-da-semana da estreia ([diaLancamentoDerivado]).
+ *
+ * Devolve **null quando não há nada a corrigir** — é o que torna a aplicação
+ * idempotente e conservadora: só toca no registro com essa assinatura exata.
+ */
+fun normalizarSerieLancando(m: Midia): Midia? {
+    if (!m.tipo.episodica) return null
+    if (m.statusLancEpisodico != StatusLancEpisodico.LANCANDO) return null
+    if (m.temporadasDisponiveis > 0) return null
+    return m.copy(
+        temporadasDisponiveis = 1,
+        temporadaAtual = m.temporadaAtual.coerceAtLeast(1),
+        diaLancamento = diaLancamentoDerivado(m),
+    )
+}
+
+/**
  * Nº de ocorrências do dia-da-semana [alvo] entre [de] e [ate]. [ate] é sempre
  * inclusivo (o episódio "sai" no próprio dia de lançamento). Com [incluiDe] = false
  * o limite inferior é exclusivo — `(de, ate]`; com true é inclusivo — `[de, ate]`.
